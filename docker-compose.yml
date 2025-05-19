@@ -5,6 +5,7 @@ services:
     build:
       #context: ./rsyslog
       dockerfile: Dockerfile-rsyslog
+    image: rsyslog-mysql:latest  
     environment:
       - TZ=${TZ}      
     ports:
