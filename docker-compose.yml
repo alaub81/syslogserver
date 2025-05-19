@@ -1,36 +1,39 @@
 version: "3.8"
 
 services:
-  syslog-ng:
+  rsyslog:
     build:
-      context: ./syslog-ng
-      dockerfile: Dockerfile
+      #context: ./rsyslog
+      dockerfile: Dockerfile-rsyslog
     environment:
-      - PUID=0
-      - PGID=0
-      - TZ=${TZ}
-    volumes:
-      - ./data/syslog-ng/config:/config
-      - ./data/syslog-ng/log:/var/log
+      - TZ=${TZ}      
     ports:
-      - "${SYSLOG_UDP_PORT}:5514/udp"
-      - "${SYSLOG_TCP_PORT_601}:6601/tcp"
-      - "${SYSLOG_TCP_PORT_6514}:6514/tcp"
+      - "${SYSLOG_UDP_PORT}:514/udp"
+      - "${SYSLOG_TCP_PORT_601}:514/tcp"
+    volumes:
+      - ./data/rsyslog/config:/etc/rsyslog.d/
+    depends_on:
+      database:
+        condition: service_healthy
     restart: unless-stopped
 
   loganalyzer:
     build:
-      context: .
-      dockerfile: Dockerfile
+      #context: ./loganalyzer
+      dockerfile: Dockerfile-loganalyzer
+      args:
+        LOGANALYZER_VERSION: ${LOGANALYZER_VERSION}
     image: loganalyzer:${LOGANALYZER_VERSION}
-    ports:
-      - "${LOGANALYZER_PORT}:80"
     environment:
       - TZ=${TZ}
+    ports:
+      - "${LOGANALYZER_PORT}:80"
     volumes:
       - ./data/syslog/log/:/var/log/
+      - ./data/loganalyzer/config/config.php:/var/www/html/config.php
     depends_on:
-      - database
+      database:
+        condition: service_healthy
     restart: unless-stopped
 
   database:
@@ -38,15 +41,15 @@ services:
     restart: always
     environment:
       - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - TZ=${TZ}
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -u root -p$${MARIADB_ROOT_PASSWORD} -e 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
-      - mariadbdata:/var/lib/mysql
-      - ./data/db-init.sql:/docker-entrypoint-initdb.d/init.sql      
-    networks:
-      - backend-nw
+      - dbdata:/var/lib/mysql
+      - ./data/init.sql:/docker-entrypoint-initdb.d/init.sql    
 
 volumes:
-  mariadbdata:
-
-networks:
-  backend-nw:
-    driver: bridge
+  dbdata:

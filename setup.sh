@@ -11,7 +11,7 @@ fi
 source .env
 
 VERSION=${LOGANALYZER_VERSION:-4.1.13}
-TARGET_DIR="./data/loganalyzer-${VERSION}"
+TARGET_DIR="./build_files/loganalyzer-${VERSION}"
 DOWNLOAD_URL="https://download.adiscon.com/loganalyzer/loganalyzer-${VERSION}.tar.gz"
 TMP_DIR=$(mktemp -d)
 
@@ -36,15 +36,15 @@ else
 fi
 
 # Docker-Image bauen
-echo "🐳 Baue Docker-Image loganalyzer:${VERSION} ..."
-docker build \
-  --build-arg LOGANALYZER_VERSION="$VERSION" \
-  -t "loganalyzer:${VERSION}" \
-  .
+# echo "🐳 Baue Docker-Image loganalyzer:${VERSION} ..."
+# docker build \
+#   --build-arg LOGANALYZER_VERSION="$VERSION" \
+#   -t "loganalyzer:${VERSION}" \
+#   .
 
 # Container starten
 echo "🚀 Starte Container mit docker-compose ..."
-docker compose --env-file .env up -d
+docker compose --env-file .env --build up -d
 
 # Abschlussinfo
 echo ""

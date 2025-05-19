@@ -1,0 +1,20 @@
+FROM debian:bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Installiere rsyslog + MySQL-Modul + Tools
+RUN apt-get update && apt-get install -y \
+    rsyslog \
+    rsyslog-mysql \
+    mariadb-client \
+    tzdata \
+    && apt-get clean
+
+# Konfigurationsdatei (optional via Volume überschreibbar)
+# COPY rsyslog.conf /etc/rsyslog.conf
+
+# Optional: Modulzeile deaktivieren (nur falls vorhanden)
+RUN sed -i 's/^\s*\(module\s*(\s*load\s*=\s*"imklog"\s*)\s*\)/# \1/' /etc/rsyslog.conf
+
+# Default CMD: starte rsyslog im Vordergrund
+CMD ["rsyslogd", "-n"]
