@@ -3,6 +3,10 @@
 set -e
 set -o pipefail
 
+# Logging aktivieren
+LOGFILE="setup.log"
+exec > >(tee -a "$LOGFILE") 2>&1
+
 # .env einlesen
 if [ ! -f .env ]; then
   echo "❌ .env-Datei nicht gefunden!"
@@ -11,9 +15,10 @@ fi
 source .env
 
 VERSION=${LOGANALYZER_VERSION:-4.1.13}
-TARGET_DIR="./build_files/loganalyzer-${VERSION}"
+TARGET_DIR="./resources/loganalyzer-${VERSION}"
 DOWNLOAD_URL="https://download.adiscon.com/loganalyzer/loganalyzer-${VERSION}.tar.gz"
 TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 echo "🔧 Starte Setup für Loganalyzer v$VERSION"
 
@@ -42,9 +47,9 @@ fi
 #   -t "loganalyzer:${VERSION}" \
 #   .
 
-# Container starten
+# Container bauen und starten
 echo "🚀 Starte Container mit docker-compose ..."
-docker compose --env-file .env --build up -d
+docker compose --env-file .env up -d --build 
 
 # Abschlussinfo
 echo ""
