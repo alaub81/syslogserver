@@ -41,15 +41,16 @@ else
 fi
 
 # Docker-Image bauen
-# echo "🐳 Baue Docker-Image loganalyzer:${VERSION} ..."
+echo "🐳 Baue Docker-Image loganalyzer:${VERSION} ..."
+docker compose build
 # docker build \
 #   --build-arg LOGANALYZER_VERSION="$VERSION" \
 #   -t "loganalyzer:${VERSION}" \
 #   .
 
-# Container bauen und starten
+# Container starten
 echo "🚀 Starte Container mit docker-compose ..."
-docker compose --env-file .env up -d --build 
+docker compose up -d --build 
 
 # Abschlussinfo
 echo ""
