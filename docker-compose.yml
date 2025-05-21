@@ -38,7 +38,7 @@ services:
 
   loganalyzer:
     build:
-      #context: ./loganalyzer
+      context: .
       dockerfile: Dockerfile-loganalyzer
       args:
         LOGANALYZER_VERSION: ${LOGANALYZER_VERSION}
