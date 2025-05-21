@@ -5,6 +5,7 @@ A modular Docker-based syslog collection and analysis stack with:
 - 🔧 **syslog-ng** (with custom parsers) – structured syslog intake over UDP/TCP and SQL output
 - 🐬 **MariaDB** – stores logs in the `SystemEvents` table
 - 📊 **LogAnalyzer** – web UI for browsing, filtering and analyzing log messages
+- 🧹 **Database Cleanup Service** -  daily cleanup tasks on the `SystemEvents` table
 
 This syslog stack is also optimized for use with **Shelly** devices, whose raw debug messages are parsed and normalized before insertion.
 
@@ -14,9 +15,10 @@ This syslog stack is also optimized for use with **Shelly** devices, whose raw d
 
 | Service      | Description                                 |
 |--------------|---------------------------------------------|
-| `syslog-ng`  | Receives, parses and classifies syslog data and sends it to the database |
+| `syslogng`   | Receives, parses and classifies syslog data and sends it to the database |
 | `mariadb`    | Stores structured events (Adiscon schema)   |
 | `loganalyzer`| PHP UI for web-based log inspection         |
+| `cleanupdb`  | supercronic powered database cleanup maintenance service  |
 
 ---
 
@@ -77,6 +79,8 @@ LOGANALYZER_PORT=8181
 
 # Database
 DB_ROOT_PASSWORD=supersecurepassword
+## Delete Database entries older then:
+LOG_RETENTION_DAYS=30
 
 # Loganalyzer Version (https://loganalyzer.adiscon.com/download/)
 LOGANALYZER_VERSION=4.1.13
@@ -95,6 +99,16 @@ LOGANALYZER_VERSION=4.1.13
   - User: `syslog@%`
   - Table: `SystemEvents` (compatible with Loganalyzer)
   - Optional: `SystemEventsProperties`
+
+### ⏰ Database Retention Scheduling
+
+The cleanup schedule is defined in the `resources/dbcleanup.cron` file using standard cron syntax.
+
+```cron
+5 10 * * * /app/dbcleanup.sh
+```
+
+This example runs the cleanup job daily at **10:05 AM** container time. If you change it, you have to rebuild the dbcleanup container.
 
 ---
 
@@ -164,6 +178,18 @@ Then check Loganalyzer.
 - Shelly-specific parsing rules → `data/syslog-ng/config/10-syslogsrv.conf`
 - SQL output fields can be adapted in the `sql()` block
 - To map `Importance`, add dynamic rules or static override (`Importance => 0`)
+
+---
+
+## 🧹 Database Cleanup Service (`dbcleanup`)
+
+This project includes a maintenance container called `dbcleanup`, which performs daily cleanup tasks on the `SystemEvents` table inside the MariaDB instance.
+
+### ✨ Purpose
+
+- Deletes old syslog entries older than a defined number of days.
+- Optimizes the `SystemEvents` table after cleanup.
+- Logs all actions to the syslog server (`syslog-ng`), visible in LogAnalyzer.
 
 ---
 
