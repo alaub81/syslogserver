@@ -1,18 +1,36 @@
-version: "3.8"
-
 services:
-  rsyslog:
+  # rsyslog container is not in use anymore!
+  # rsyslog:
+  #   build:
+  #     #context: ./rsyslog
+  #     dockerfile: Dockerfile-rsyslog
+  #   image: rsyslog-mysql:latest  
+  #   environment:
+  #     - TZ=${TZ}      
+  #   ports:
+  #     - "${SYSLOG_UDP_PORT}:514/udp"
+  #     - "${SYSLOG_TCP_PORT}:514/tcp"
+  #   volumes:
+  #     - ./data/rsyslog/config:/etc/rsyslog.d/
+  #     - ./data/syslog-ng/log/:/var/log/
+  #   depends_on:
+  #     database:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+  syslogng:
     build:
-      #context: ./rsyslog
-      dockerfile: Dockerfile-rsyslog
-    image: rsyslog-mysql:latest  
-    environment:
-      - TZ=${TZ}      
+      context: .
+      dockerfile: Dockerfile-syslogng
+    image: syslogng-mysql:latest   
     ports:
       - "${SYSLOG_UDP_PORT}:514/udp"
-      - "${SYSLOG_TCP_PORT}:514/tcp"
+      - "${SYSLOG_TCP_PORT}:514"
+    environment:
+      - TZ=${TZ}       
     volumes:
-      - ./data/rsyslog/config:/etc/rsyslog.d/
+      - ./data/syslog-ng/config:/etc/syslog-ng/conf.d/
+      - ./data/syslog-ng/log/:/var/log/
     depends_on:
       database:
         condition: service_healthy
@@ -35,7 +53,6 @@ services:
     ports:
       - "${LOGANALYZER_PORT}:80"
     volumes:
-      - ./data/syslog/log/:/var/log/
       - ./data/loganalyzer/config/config.php:/var/www/html/config.php
     depends_on:
       database:
@@ -55,7 +72,22 @@ services:
       retries: 5
     volumes:
       - dbdata:/var/lib/mysql
-      - ./data/init.sql:/docker-entrypoint-initdb.d/init.sql    
+      - ./data/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  cleanup:
+    build:
+      context: .
+      dockerfile: Dockerfile-dbcleanup
+    image: dbcleanup:latest
+    depends_on:
+      - database
+    environment:
+      DB_HOST: database
+      DB_NAME: syslogdb
+      DB_USER: syslog
+      DB_PASSWORD: syslogpass
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS}
+      TZ: ${TZ}
 
 volumes:
   dbdata:

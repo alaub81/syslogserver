@@ -1,2 +1,5 @@
 resources/*
 .env
+setup.log
+.DS_Store
+data/syslog-ng/log/*

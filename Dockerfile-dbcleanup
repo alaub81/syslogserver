@@ -1,0 +1,26 @@
+FROM debian:bookworm
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    bash \
+    mariadb-client
+
+# Latest releases available at https://github.com/aptible/supercronic/releases
+ENV SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.33/supercronic-linux-386 \
+    SUPERCRONIC_SHA1SUM=37c4c0b42c4b00be123d2f9736754bcf0659ae4e \
+    SUPERCRONIC=supercronic-linux-386
+
+RUN curl -fsSLO "$SUPERCRONIC_URL" \
+    && echo "${SUPERCRONIC_SHA1SUM}  ${SUPERCRONIC}" | sha1sum -c - \
+    && chmod +x "$SUPERCRONIC" \
+    && mv "$SUPERCRONIC" "/usr/local/bin/${SUPERCRONIC}" \
+    && ln -s "/usr/local/bin/${SUPERCRONIC}" /usr/local/bin/supercronic
+    # && curl -fsSL -o /usr/local/bin/supercronic https://github.com/aptible/supercronic/releases/latest/download/supercronic-linux-amd64 \
+    # && chmod +x /usr/local/bin/supercronic
+
+WORKDIR /app
+COPY resources/dbcleanup.sh /app/dbcleanup.sh
+COPY resources/dbcleanup.cron /app/dbcleanup.cron
+RUN chmod +x /app/dbcleanup.sh
+
+ENTRYPOINT ["/usr/local/bin/supercronic", "/app/dbcleanup.cron"]

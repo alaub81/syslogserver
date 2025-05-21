@@ -1,24 +1,26 @@
-# 🛰️ SyslogServer – Dockerized rsyslog + MariaDB + Loganalyzer
+# 🛰️ SyslogServer (with syslog-ng, MariaDB & Loganalyzer)
 
-A self-contained, Docker-based syslog server stack with:
+A modular Docker-based syslog collection and analysis stack with:
 
-- 📬 **rsyslog** – high-performance log receiver and SQL output
-- 🐬 **MariaDB** – stores structured log entries
-- 📊 **LogAnalyzer** – PHP web interface for searching, filtering and viewing logs
-- 🐳 **Docker Compose** – orchestrates everything in isolated containers
+- 🔧 **syslog-ng** (with custom parsers) – structured syslog intake over UDP/TCP and SQL output
+- 🐬 **MariaDB** – stores logs in the `SystemEvents` table
+- 📊 **LogAnalyzer** – web UI for browsing, filtering and analyzing log messages
 
----
-
-## 🔧 Use Cases
-
-- Centralized syslog collection for multiple devices or servers (via UDP or TCP)
-- Database-backed log storage for long-term analysis
-- Web-based interface for live log inspection and filtering
-- Ideal for homelab monitoring, testing environments, or small-scale infrastructure
+This syslog stack is also optimized for use with **Shelly** devices, whose raw debug messages are parsed and normalized before insertion.
 
 ---
 
-## 🚀 Quick Start
+## 🧱 Components
+
+| Service      | Description                                 |
+|--------------|---------------------------------------------|
+| `syslog-ng`  | Receives, parses and classifies syslog data and sends it to the database |
+| `mariadb`    | Stores structured events (Adiscon schema)   |
+| `loganalyzer`| PHP UI for web-based log inspection         |
+
+---
+
+## 🚀 Getting Started
 
 ### 1. Clone this repository
 
@@ -27,39 +29,40 @@ git clone https://github.com/alaub81/syslogserver.git
 cd syslogserver
 ```
 
-### 2. Create `.env` from example
+### 2. Configure `.env`
 
 ```bash
 cp .env.example .env
 # Then adjust ports, DB credentials, timezone etc.
 ```
 
-### 3. Run setup script
+### 3. Run setup
 
 ```bash
 chmod +x setup.sh
 ./setup.sh
 ```
 
+> Will build images, download Loganalyzer, initialize DB, and start all containers.
 > Or force re-download of Loganalyzer:
+
 ```bash
 ./setup.sh --force-download
 ```
 
 ---
 
-## 🌐 Access
+## 🌐 Access & Ports
 
-- **LogAnalyzer Web UI**: [http://localhost:8181](http://localhost:8181) (default value, configurable)
-- **Syslog Input Ports**:
-  - UDP: `514` (default value, configurable)
-  - TCP: `514` (default value, configurable)
-
----
+- **LogAnalyzer**: [http://localhost:8181](http://localhost:8181)
+- **Syslog UDP**: `514/udp`
+- **Syslog TCP**: `514/tcp`
 
 ## ⚙️ Configuration Overview
 
 ### `.env`
+
+The loganalyzer version can be checked here: [https://loganalyzer.adiscon.com/download/](https://loganalyzer.adiscon.com/download/)
 
 All key settings are externalized:
 
@@ -75,15 +78,15 @@ LOGANALYZER_PORT=8181
 # Database
 DB_ROOT_PASSWORD=supersecurepassword
 
-# Loganalyzer Version
+# Loganalyzer Version (https://loganalyzer.adiscon.com/download/)
 LOGANALYZER_VERSION=4.1.13
 ```
 
-### `rsyslog.conf`
+### `./data/syslog-ng/config/10-syslogsrv.conf`
 
 - Configured to **receive via UDP & TCP**
-- Writes only to **MySQL database**, not to local log files
-- Automatically disables `imklog` for container compatibility
+- Writes to **MariaDB database**
+- Shelly parsers
 
 ### `init.sql`
 
@@ -95,15 +98,72 @@ LOGANALYZER_VERSION=4.1.13
 
 ---
 
-## 🧪 Logging Test
+## 🧩 syslog-ng Features
+
+- Parses Shelly logs using `regexp-parser` blocks
+- Extracts fields like `LEVEL`, `PROGRAM`, `MESSAGE`, `PID` from raw payload
+- Logs are normalized into classic syslog fields
+- Output is written into MariaDB using:
+
+```sql
+INSERT INTO SystemEvents (
+  ReceivedAt, DeviceReportedTime,
+  Facility, Priority,
+  FromHost, Message, SysLogTag, Importance
+)
+```
+
+---
+
+## 🧠 Shelly Parser Example
+
+Located in `data/syslog-ng/config/10-syslogsrv.conf`:
+
+```syslog-ng
+parser p_shelly_level {
+  regexp-parser(
+    pattern("^(?P<LEVEL>[A-Z]+)")
+    ...
+  );
+};
+```
+
+→ Used in `log { ... parser(p_shelly_level); };` block
+
+---
+
+## 🗃️ Database Schema
+
+SystemEvents follows Adiscon LogAnalyzer format:
+
+| Field            | Description                 |
+|------------------|-----------------------------|
+| `ReceivedAt`     | Timestamp at syslog-ng      |
+| `FromHost`       | IP/hostname from device     |
+| `Message`        | Cleaned-up log payload      |
+| `SysLogTag`      | Program name (if present)   |
+| `Importance`     | Drives "Message Type" column in UI |
+| `EventLogType`   | Used in detailed view, optional |
+
+---
+
+## 🧪 Test a log
 
 Send a test message:
 
 ```bash
-logger --server 127.0.0.1 --port 514 --udp "Hello from test syslog!"
+logger -n 127.0.0.1 -P 514 -d "DEBUG test log from shell"
 ```
 
-Check in Web UI → new entry should appear.
+Then check Loganalyzer.
+
+---
+
+## ⚙️ Customization
+
+- Shelly-specific parsing rules → `data/syslog-ng/config/10-syslogsrv.conf`
+- SQL output fields can be adapted in the `sql()` block
+- To map `Importance`, add dynamic rules or static override (`Importance => 0`)
 
 ---
 
@@ -117,14 +177,15 @@ Check in Web UI → new entry should appear.
 
 ## 📜 License
 
-This project is under the GPL-3.0 License. Loganalyzer is © by Adiscon GmbH.
+This project: GPL-3.0 License
+LogAnalyzer: © Adiscon GmbH  
+syslog-ng: © One Identity
 
 ---
 
 ## 🙌 Credits
 
-Created by [@alaub81](https://github.com/alaub81)
-
-LogAnalyzer by Adiscon  
-rsyslog by Rainer Gerhards  
+Maintained by [@alaub81](https://github.com/alaub81)  
+Log parsing magic powered by `syslog-ng` + `regexp-parser`
+LogAnalyzer by Adiscon
 MariaDB by the MariaDB Foundation

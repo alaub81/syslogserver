@@ -53,3 +53,27 @@ CREATE TABLE IF NOT EXISTS SystemEventsProperties (
   ParamName varchar(255),
   ParamValue text
 );
+
+-- ------------------------------------------------------------------
+-- Zusatz-Indexe zur Performance-Verbesserung (LogAnalyzer & Filter)
+-- ------------------------------------------------------------------
+
+ALTER TABLE SystemEvents
+  ADD KEY `FromHost` (`FromHost`),
+  ADD KEY `SysLogTag` (`SysLogTag`),
+  ADD KEY `Facility` (`Facility`),
+  ADD KEY `Priority` (`Priority`),
+  ADD KEY `ReceivedAt` (`ReceivedAt`),
+  ADD KEY `DeviceReportedTime` (`DeviceReportedTime`),
+  ADD FULLTEXT KEY `Message` (`Message`);
+
+-- ---------------------------------------
+-- Automatically optimize the table daily
+-- ---------------------------------------
+
+CREATE EVENT IF NOT EXISTS cleanup_logs
+ON SCHEDULE EVERY 1 DAY
+DO
+BEGIN
+  OPTIMIZE TABLE SystemEvents;
+END;  
