@@ -1,0 +1,7 @@
+.git
+**/*.log
+data/syslog-ng/log/*
+secrets/*
+.env
+.DS_Store
+node_modules
