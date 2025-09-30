@@ -20,7 +20,7 @@ RUN curl -fsSLO "$SUPERCRONIC_URL" \
 
 WORKDIR /app
 COPY resources/dbcleanup.sh /app/dbcleanup.sh
-COPY resources/cron-entrypoint.sh /app/cron-entrypoint.sh
-RUN chmod +x /app/dbcleanup.sh /app/cron-entrypoint.sh
+COPY resources/dbcleanup-entrypoint.sh /app/dbcleanup-entrypoint.sh
+RUN chmod +x /app/dbcleanup.sh /app/dbcleanup-entrypoint.sh
 
-ENTRYPOINT ["/app/cron-entrypoint.sh"]
+ENTRYPOINT ["/app/dbcleanup-entrypoint.sh"]
