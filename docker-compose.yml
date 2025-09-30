@@ -74,7 +74,7 @@ services:
       - dbdata:/var/lib/mysql
       - ./data/init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  cleanup:
+  dbcleanup:
     build:
       context: .
       dockerfile: Dockerfile-dbcleanup
@@ -87,6 +87,7 @@ services:
       DB_USER: syslog
       DB_PASSWORD: syslogpass
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS}
+      DBCLEANUP_CRON: ${DBCLEANUP_CRON}
       TZ: ${TZ}
 
 volumes:

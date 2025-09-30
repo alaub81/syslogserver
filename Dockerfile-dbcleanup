@@ -1,33 +1,20 @@
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y \
     curl \
     bash \
     mariadb-client
 
-# Latest releases available at https://github.com/aptible/supercronic/releases
-# ENV SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.33/supercronic-linux-386 \
-#     SUPERCRONIC_SHA1SUM=37c4c0b42c4b00be123d2f9736754bcf0659ae4e \
-#     SUPERCRONIC=supercronic-linux-386
-
-# ENV SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.34/supercronic-linux-amd64 \
-#     SUPERCRONIC_SHA1SUM=e8631edc1775000d119b70fd40339a7238eece14 \
-#     SUPERCRONIC=supercronic-linux-amd64
-
-ENV SUPERCRONIC_URL=https://github.com/aptible/supercronic/releases/download/v0.2.34/supercronic-linux-arm64 \
-    SUPERCRONIC_SHA1SUM=4ab6343b52bf9da592e8b4bb7ae6eb5a8e21b71e \
-    SUPERCRONIC=supercronic-linux-arm64    
-
-
+ARG TARGETARCH
+ENV SUPERCRONIC_URL="https://github.com/aptible/supercronic/releases/download/v0.2.35/supercronic-linux-${TARGETARCH}" \
+    SUPERCRONIC="supercronic-linux-${TARGETARCH}"
 RUN curl -fsSLO "$SUPERCRONIC_URL" \
-    && echo "${SUPERCRONIC_SHA1SUM}  ${SUPERCRONIC}" | sha1sum -c - \
-    && chmod +x "$SUPERCRONIC" \
-    && mv "$SUPERCRONIC" "/usr/local/bin/${SUPERCRONIC}" \
-    && ln -s "/usr/local/bin/${SUPERCRONIC}" /usr/local/bin/supercronic
+ && chmod +x "$SUPERCRONIC" \
+ && mv "$SUPERCRONIC" /usr/local/bin/supercronic
 
 WORKDIR /app
 COPY resources/dbcleanup.sh /app/dbcleanup.sh
-COPY resources/dbcleanup.cron /app/dbcleanup.cron
-RUN chmod +x /app/dbcleanup.sh
+COPY resources/cron-entrypoint.sh /app/cron-entrypoint.sh
+RUN chmod +x /app/dbcleanup.sh /app/cron-entrypoint.sh
 
-ENTRYPOINT ["/usr/local/bin/supercronic", "/app/dbcleanup.cron"]
+ENTRYPOINT ["/app/cron-entrypoint.sh"]
