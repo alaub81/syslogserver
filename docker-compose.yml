@@ -1,23 +1,4 @@
 services:
-  # rsyslog container is not in use anymore!
-  # rsyslog:
-  #   build:
-  #     #context: ./rsyslog
-  #     dockerfile: Dockerfile-rsyslog
-  #   image: rsyslog-mysql:latest  
-  #   environment:
-  #     - TZ=${TZ}      
-  #   ports:
-  #     - "${SYSLOG_UDP_PORT}:514/udp"
-  #     - "${SYSLOG_TCP_PORT}:514/tcp"
-  #   volumes:
-  #     - ./data/rsyslog/config:/etc/rsyslog.d/
-  #     - ./data/syslog-ng/log/:/var/log/
-  #   depends_on:
-  #     database:
-  #       condition: service_healthy
-  #   restart: unless-stopped
-
   syslogng:
     build:
       context: .
@@ -27,7 +8,11 @@ services:
       - "${SYSLOG_UDP_PORT}:514/udp"
       - "${SYSLOG_TCP_PORT}:514"
     environment:
-      - TZ=${TZ}       
+      LOGROTATE_CRON: ${LOGROTATE_CRON}
+      LOGROTATE_SIZE: ${LOGROTATE_SIZE}
+      LOGROTATE_MAX_AGE_DAYS: ${LOGROTATE_MAX_AGE_DAYS}
+      LOGROTATE_ROTATIONS: ${LOGROTATE_ROTATIONS}    
+      TZ: ${TZ}
     volumes:
       - ./data/syslog-ng/config:/etc/syslog-ng/conf.d/
       - ./data/syslog-ng/log/:/var/log/
