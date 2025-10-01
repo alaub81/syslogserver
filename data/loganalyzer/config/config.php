@@ -85,7 +85,7 @@ $CFG['PrependTitle'] = "";					// If set, this	text will be prepended withint th
 $CFG['ViewUseTodayYesterday'] = 1;			// If enabled, the date from today and yesterday is displayed as "today" and "yesterday"
 $CFG['ViewMessageCharacterLimit'] = 0;		// Default character limit for the message gets trunscated! 0 means NO trunscation.
 $CFG['ViewStringCharacterLimit'] = 100;		// Default character limit for all other string type fields before they get trunscated! 0 means NO trunscation.
-$CFG['ViewEntriesPerPage'] = 500;			// Default number of syslog entries shown per page
+$CFG['ViewEntriesPerPage'] = 100;			// Default number of syslog entries shown per page
 $CFG['ViewEnableDetailPopups'] = 1;			// If enabled, you will see additional Details for each syslog message on mouse over. 
 $CFG['ViewDefaultTheme'] = "default";		// This sets the default theme the user is going to see when he opens LogAnalyzer the first time. 
 											// Currently only "default" and "dark" are available. 
