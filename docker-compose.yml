@@ -32,7 +32,8 @@ services:
       dockerfile: Dockerfile-loganalyzer
       args:
         LOGANALYZER_VERSION: ${LOGANALYZER_VERSION}
-    image: loganalyzer:${LOGANALYZER_VERSION}
+        LOGANALYZER_URL: ${LOGANALYZER_URL}
+    image: loganalyzer:latest
     environment:
       - TZ=${TZ}
     healthcheck:

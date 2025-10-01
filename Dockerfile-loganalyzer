@@ -1,24 +1,46 @@
 FROM php:8.2-apache
 ENV DEBIAN_FRONTEND=noninteractive
 
-ARG LOGANALYZER_VERSION
-ENV LOGANALYZER_VERSION=${LOGANALYZER_VERSION}
-
-# benötigte PHP-Extensions
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
+      ca-certificates \
       curl \
       unzip \
       tzdata \
-      ca-certificates \
- && docker-php-ext-install \
-      mysqli pdo pdo_mysql \
- #&& a2enmod rewrite expires \
+ && docker-php-ext-install mysqli pdo pdo_mysql \
+ && a2enmod rewrite expires \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-# Loganalyzer kopieren
-COPY ./resources/loganalyzer-${LOGANALYZER_VERSION}/src/ /var/www/html/
+# ---- LogAnalyzer Build-Parameter ----
+# Beispiel: LOGANALYZER_VERSION=4.1.13
+ARG LOGANALYZER_VERSION=4.1.12
+# Wenn du die URL selbst setzen willst, überschreibe sie im Compose:
+ARG LOGANALYZER_URL="https://download.adiscon.com/loganalyzer/loganalyzer-${LOGANALYZER_VERSION}.tar.gz"
 
-# Zugriffsrechte setzen
-RUN chown -R www-data:www-data /var/www/html && chmod -R 755 /var/www/html
+RUN set -Eeux; \
+    test -n "${LOGANALYZER_VERSION}"; \
+    test -n "${LOGANALYZER_URL}"; \
+    UNPACK_DIR="/tmp/la/unpack"; \
+    mkdir -p "${UNPACK_DIR}"; \
+    curl -fSL "${LOGANALYZER_URL}" -o /tmp/la/archive; \
+    case "${LOGANALYZER_URL}" in \
+      *.zip) unzip -q /tmp/la/archive -d "${UNPACK_DIR}" ;; \
+      *.tar.gz|*.tgz) tar -xzf /tmp/la/archive -C "${UNPACK_DIR}" ;; \
+      *) echo "Unsupported archive type: ${LOGANALYZER_URL}"; exit 3 ;; \
+    esac; \
+    # Zielverzeichnis mit index.php ermitteln (typisch .../src)
+    if [ -f "${UNPACK_DIR}/index.php" ]; then \
+      CONTENT_DIR="${UNPACK_DIR}"; \
+    elif [ -f "${UNPACK_DIR}/src/index.php" ]; then \
+      CONTENT_DIR="${UNPACK_DIR}/src"; \
+    else \
+      CONTENT_DIR="$(dirname "$(find "${UNPACK_DIR}" -maxdepth 3 -type f -name index.php | head -n1)")"; \
+    fi; \
+    test -n "${CONTENT_DIR}" && [ -f "${CONTENT_DIR}/index.php" ] || { echo "index.php not found after extract"; exit 4; }; \
+    rm -rf /var/www/html/*; \
+    cp -a "${CONTENT_DIR}/." /var/www/html/; \
+    chown -R www-data:www-data /var/www/html; \
+    rm -rf /tmp/la
+
+EXPOSE 80

@@ -1,5 +1,4 @@
 .env
-setup.log
 .DS_Store
 data/syslog-ng/log/*
 resources/loganalyzer*
