@@ -33,7 +33,7 @@ services:
       args:
         LOGANALYZER_VERSION: ${LOGANALYZER_VERSION}
         LOGANALYZER_URL: ${LOGANALYZER_URL}
-    image: loganalyzer:latest
+    image: loganalyzer:${LOGANALYZER_VERSION}
     environment:
       - TZ=${TZ}
     healthcheck:

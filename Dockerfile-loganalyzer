@@ -5,7 +5,6 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates \
       curl \
-      unzip \
       tzdata \
  && docker-php-ext-install mysqli pdo pdo_mysql \
  && a2enmod rewrite expires \
@@ -13,9 +12,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # ---- LogAnalyzer Build-Parameter ----
-# Beispiel: LOGANALYZER_VERSION=4.1.13
-ARG LOGANALYZER_VERSION=4.1.12
-# Wenn du die URL selbst setzen willst, überschreibe sie im Compose:
+ARG LOGANALYZER_VERSION=4.1.13
 ARG LOGANALYZER_URL="https://download.adiscon.com/loganalyzer/loganalyzer-${LOGANALYZER_VERSION}.tar.gz"
 
 RUN set -Eeux; \
@@ -24,12 +21,7 @@ RUN set -Eeux; \
     UNPACK_DIR="/tmp/la/unpack"; \
     mkdir -p "${UNPACK_DIR}"; \
     curl -fSL "${LOGANALYZER_URL}" -o /tmp/la/archive; \
-    case "${LOGANALYZER_URL}" in \
-      *.zip) unzip -q /tmp/la/archive -d "${UNPACK_DIR}" ;; \
-      *.tar.gz|*.tgz) tar -xzf /tmp/la/archive -C "${UNPACK_DIR}" ;; \
-      *) echo "Unsupported archive type: ${LOGANALYZER_URL}"; exit 3 ;; \
-    esac; \
-    # Zielverzeichnis mit index.php ermitteln (typisch .../src)
+    tar -xzf /tmp/la/archive -C "${UNPACK_DIR}"; \
     if [ -f "${UNPACK_DIR}/index.php" ]; then \
       CONTENT_DIR="${UNPACK_DIR}"; \
     elif [ -f "${UNPACK_DIR}/src/index.php" ]; then \
@@ -42,5 +34,3 @@ RUN set -Eeux; \
     cp -a "${CONTENT_DIR}/." /var/www/html/; \
     chown -R www-data:www-data /var/www/html; \
     rm -rf /tmp/la
-
-EXPOSE 80
