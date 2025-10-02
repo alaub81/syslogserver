@@ -22,10 +22,10 @@ jobs:
           # optional: falls du zusätzlich einen "Dockerfile" im Root hast
           # - Dockerfile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Hadolint
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: ${{ matrix.dockerfile }}   # <-- genau 1 Datei
           config: .hadolint.yaml
@@ -68,7 +68,7 @@ jobs:
             dockerfile: Dockerfile-dbcleanup
             context: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -104,7 +104,7 @@ jobs:
 
       # Trivy Image Scan (SARIF)
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: image
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
@@ -140,7 +140,7 @@ jobs:
       LOCAL_TAG: ${{ matrix.name }}:pr-${{ github.event.number || github.run_number }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
@@ -157,7 +157,7 @@ jobs:
 
       # Trivy scannt das lokale Image (kein GHCR-Pull nötig)
       - name: Trivy scan (local image)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: image
           image-ref: ${{ env.LOCAL_TAG }}
@@ -171,7 +171,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build_and_scan
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Write CI .env (override)
         run: |
