@@ -21,7 +21,7 @@ RUN set -eux; \
     UNPACK_DIR="/tmp/la/unpack"; \
     mkdir -p "${UNPACK_DIR}"; \
     curl -fSL "${LOGANALYZER_URL}" -o /tmp/la/archive; \
-    tar -xzf /tmp/la/archive -C "${UNPACK_DIR}"; \
+    tar -xzf /tmp/la/archive --strip-components=1 -C "${UNPACK_DIR}"; \
     CONTENT_DIR="${UNPACK_DIR}/src"; \
     rm -rf /var/www/html/*; \
     cp -a "${CONTENT_DIR}/." /var/www/html/; \
