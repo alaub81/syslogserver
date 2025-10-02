@@ -35,8 +35,8 @@ services:
       context: .
       dockerfile: Dockerfile-loganalyzer
       args:
-        LOGANALYZER_VERSION: ${LOGANALYZER_VERSION}
-        LOGANALYZER_URL: ${LOGANALYZER_URL}
+        LOGANALYZER_VERSION: "${LOGANALYZER_VERSION:-4.1.13}"
+        LOGANALYZER_URL: "${LOGANALYZER_URL:-https://download.adiscon.com/loganalyzer/loganalyzer-4.1.13.tar.gz}"
     image: loganalyzer:${LOGANALYZER_VERSION}
     environment:
       TZ: ${TZ}
