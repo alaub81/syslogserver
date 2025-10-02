@@ -37,7 +37,7 @@ services:
       args:
         LOGANALYZER_VERSION: "${LOGANALYZER_VERSION:-4.1.13}"
         LOGANALYZER_URL: "${LOGANALYZER_URL:-https://download.adiscon.com/loganalyzer/loganalyzer-4.1.13.tar.gz}"
-    image: loganalyzer:${LOGANALYZER_VERSION}
+    image: loganalyzer:${LOGANALYZER_VERSION:-latest}
     environment:
       TZ: ${TZ}
       DB_HOST: database
