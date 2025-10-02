@@ -12,11 +12,9 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 ARG TARGETARCH
-ENV SUPERCRONIC_URL="https://github.com/aptible/supercronic/releases/download/v0.2.35/supercronic-linux-${TARGETARCH}" \
-    SUPERCRONIC="supercronic-linux-${TARGETARCH}"
-RUN curl -fsSLO "$SUPERCRONIC_URL" \
- && chmod +x "$SUPERCRONIC" \
- && mv "$SUPERCRONIC" /usr/local/bin/supercronic
+RUN curl -fsSLo /usr/local/bin/supercronic \
+      "https://github.com/aptible/supercronic/releases/download/v0.2.34/supercronic-linux-${TARGETARCH}" \
+ && chmod +x /usr/local/bin/supercronic
 
 WORKDIR /app
 COPY resources/dbcleanup.sh /app/dbcleanup.sh
