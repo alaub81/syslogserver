@@ -12,18 +12,25 @@ permissions:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile:
+          - Dockerfile-loganalyzer
+          - Dockerfile-syslog-ng
+          - Dockerfile-dbcleanup
+          # optional: falls du zusätzlich einen "Dockerfile" im Root hast
+          # - Dockerfile
     steps:
       - uses: actions/checkout@v4
 
-      # Hadolint (Dockerfiles)
       - name: Hadolint
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          path: .
-          recursive: true
+          dockerfile: ${{ matrix.dockerfile }}   # <-- genau 1 Datei
           config: .hadolint.yaml
-          failure-threshold: warning   # oder error
-
+          failure-threshold: warning
+          
       # ShellCheck (alle Shell-Skripte)
       - name: ShellCheck
         uses: ludeeus/action-shellcheck@2.0.0
