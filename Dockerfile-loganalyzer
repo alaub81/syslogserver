@@ -15,7 +15,7 @@ RUN apt-get update \
 ARG LOGANALYZER_VERSION=4.1.13
 ARG LOGANALYZER_URL="https://download.adiscon.com/loganalyzer/loganalyzer-${LOGANALYZER_VERSION}.tar.gz"
 
-RUN set -Eeux; \
+RUN set -eux; \
     test -n "${LOGANALYZER_VERSION}"; \
     test -n "${LOGANALYZER_URL}"; \
     UNPACK_DIR="/tmp/la/unpack"; \
