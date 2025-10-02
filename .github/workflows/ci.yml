@@ -160,8 +160,12 @@ jobs:
 
       - name: Verify DB contains the test log
         run: |
-          docker compose exec -T database mariadb -u"$DB_USER" -p"$DB_PASSWORD" -D "$DB_NAME" \
-            -e "SELECT COUNT(*) AS cnt FROM SystemEvents WHERE Message LIKE '%${TEST_MSG}%'\G" | tee /tmp/db_check.txt
+          docker compose exec -T -e TEST_MSG="$TEST_MSG" database sh -lc '
+            mariadb -u"$MARIADB_USER" --password="$MARIADB_PASSWORD" -D "$MARIADB_DATABASE" -Nse \
+            "SELECT COUNT(*) AS cnt
+              FROM SystemEvents
+              WHERE Message LIKE '\''%'"$TEST_MSG"'%'\''\G"
+          ' | tee /tmp/db_check.txt
           grep -q "cnt: 1" /tmp/db_check.txt
 
       - name: Show logs on failure
