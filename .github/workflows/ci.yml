@@ -17,7 +17,7 @@ jobs:
       matrix:
         dockerfile:
           - Dockerfile-loganalyzer
-          - Dockerfile-syslog-ng
+          - Dockerfile-syslogng
           - Dockerfile-dbcleanup
           # optional: falls du zusätzlich einen "Dockerfile" im Root hast
           # - Dockerfile
@@ -30,7 +30,7 @@ jobs:
           dockerfile: ${{ matrix.dockerfile }}   # <-- genau 1 Datei
           config: .hadolint.yaml
           failure-threshold: warning
-          
+
       # ShellCheck (alle Shell-Skripte)
       - name: ShellCheck
         uses: ludeeus/action-shellcheck@2.0.0
