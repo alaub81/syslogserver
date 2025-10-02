@@ -3,7 +3,7 @@ name: CI (lint, build, scan, e2e)
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: read
