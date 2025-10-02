@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":enableVulnerabilityAlerts",
+    "docker:enableMajor"
+  ],
+  "timezone": "Europe/Berlin",
+  "schedule": ["before 06:00 on monday"],
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "matchManagers": ["dockerfile", "github-actions"],
+      "automerge": true,
+      "automergeType": "pr",
+      "major": { "automerge": false },
+      "minor": { "automerge": true },
+      "patch": { "automerge": true }
+    },
+    {
+      "matchDatasources": ["docker"],
+      "groupName": "base-images"
+    }
+  ],
+  "regexManagers": [
+    {
+      "fileMatch": ["^\\.env$", "^\\.env\\.example$"],
+      "matchStrings": [
+        "LOGANALYZER_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "adiscon/loganalyzer",
+      "versioningTemplate": "semver"
+    }
+  ]
+}

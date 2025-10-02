@@ -1,0 +1,168 @@
+name: CI (lint, build, scan, e2e)
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  security-events: write  # für SARIF Upload (Trivy)
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Hadolint (Dockerfiles)
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: |
+            Dockerfile-*
+            Dockerfile
+          config: .hadolint.yaml
+          no-fail: false
+
+      # ShellCheck (alle Shell-Skripte)
+      - name: ShellCheck
+        uses: ludeeus/action-shellcheck@v2
+        with:
+          scandir: .
+          ignore_names: |
+            *.log
+            *.sql
+
+      # Yamllint (.yml/.yaml)
+      - name: Yamllint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_file: .yamllint.yaml
+          file_or_dir: |
+            .
+          strict: true
+
+  build_and_scan:
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: loganalyzer
+            dockerfile: Dockerfile-loganalyzer
+            context: .
+          - name: syslog-ng
+            dockerfile: Dockerfile-syslog-ng
+            context: .
+          - name: dbcleanup
+            dockerfile: Dockerfile-dbcleanup
+            context: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/syslogserver-${{ matrix.image.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build (multi-arch, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Trivy Image Scan (SARIF)
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: sarif
+          output: trivy-${{ matrix.image.name }}.sarif
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          ignore-unfixed: true
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.image.name }}.sarif
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: build_and_scan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write CI .env (override)
+        run: |
+          cat > .env.ci <<'EOF'
+          TZ=Europe/Berlin
+          DB_NAME=syslogdb
+          DB_USER=syslog
+          DB_PASSWORD=ciPassw0rd!
+          DB_ROOT_PASSWORD=ciRootPassw0rd!
+          SYSLOG_UDP_PORT=514
+          SYSLOG_TCP_PORT=514
+          LOGANALYZER_HTTP_PORT=8181
+          LOG_RETENTION_DAYS=7
+          DBCLEANUP_CRON=*/2 * * * *
+          EOF
+
+      - name: Compose up (detached, build)
+        run: |
+          docker compose --env-file .env.ci up -d --build
+          # Warten bis DB & syslog-ng healthy (max 90s)
+          for i in {1..30}; do
+            unhealthy=$(docker compose ps --format json | jq -r '.[] | select(.Health!="" and .Health!="healthy") | .Name' | wc -l)
+            [ "$unhealthy" -eq 0 ] && break
+            sleep 3
+          done
+          docker compose ps
+
+      - name: Send test log via busybox logger (UDP)
+        run: |
+          NET=$(docker network ls --format '{{.Name}}' | grep syslogserver || true)
+          MSG="ci-test-$(date +%s)"
+          docker run --rm --network ${NET:-bridge} busybox sh -c \
+            "logger -n syslogng -P 514 -d \"$MSG\" || nc -u -w1 syslogng 514 <<<\"<14>$MSG\""
+          echo "TEST_MSG=$MSG" >> $GITHUB_ENV
+
+      - name: Verify DB contains the test log
+        run: |
+          docker compose exec -T database mariadb -u"$DB_USER" -p"$DB_PASSWORD" -D "$DB_NAME" \
+            -e "SELECT COUNT(*) AS cnt FROM SystemEvents WHERE Message LIKE '%${TEST_MSG}%'\G" | tee /tmp/db_check.txt
+          grep -q "cnt: 1" /tmp/db_check.txt
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker compose logs --no-color > compose-logs.txt || true
+          sed -n '1,400p' compose-logs.txt
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

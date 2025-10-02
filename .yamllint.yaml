@@ -1,0 +1,12 @@
+extends: default
+
+rules:
+  line-length:
+    max: 140
+    level: warning
+  truthy:
+    level: error
+  document-start:
+    present: false
+  indentation:
+    indent-sequences: consistent
