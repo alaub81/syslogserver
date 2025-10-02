@@ -2,7 +2,7 @@
 set -eu
 
 # --- ENV Defaults (per .env/compose überschreibbar) ---
-: "${LOGROTATE_CRON:=0 0 * * *}"         # täglich 00:00
+: "${LOGROTATE_CRON:=0 0 * * *}"          # täglich 00:00
 : "${LOGROTATE_SIZE:=50M}"                # ab Größe rotieren
 : "${LOGROTATE_MAX_AGE_DAYS:=30}"         # rotierte Files > X Tage löschen
 : "${LOGROTATE_ROTATIONS:=7}"             # Anzahl der Backups
@@ -21,7 +21,7 @@ cat >/etc/logrotate.d/syslogserver <<EOF
     compress
     delaycompress
     dateext
-    dateformat -%Y%m%d-%s
+    dateformat -%Y%m%d-%H%M
     sharedscripts
     olddir /var/log/rotated
     postrotate

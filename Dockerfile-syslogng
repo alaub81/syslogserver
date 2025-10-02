@@ -25,8 +25,8 @@ RUN curl -fsSLo /usr/local/bin/supercronic \
  && chmod +x /usr/local/bin/supercronic
 
 # EntryPoint: schreibt Logrotate-Config aus ENV + startet Supercronic & syslog-ng
-COPY resources/syslog-entrypoint.sh /usr/local/bin/syslog-entrypoint.sh
-RUN chmod +x /usr/local/bin/syslog-entrypoint.sh
+COPY resources/syslogng-entrypoint.sh /usr/local/bin/syslogng-entrypoint.sh
+RUN chmod +x /usr/local/bin/syslogng-entrypoint.sh
 
 # WICHTIG: syslog-ng bleibt der "Hauptprozess", supercronic läuft im Hintergrund
-CMD ["/usr/local/bin/syslog-entrypoint.sh"]
+CMD ["/usr/local/bin/syslogng-entrypoint.sh"]

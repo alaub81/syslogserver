@@ -3,5 +3,5 @@
 data/syslog-ng/log/*
 secrets/*
 .env
+.env.example
 .DS_Store
-node_modules

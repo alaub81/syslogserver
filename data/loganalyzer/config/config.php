@@ -169,6 +169,10 @@ $CFG['DiskAllowed'][] = "/var/log/";
 	$CFG['Sources']['Source2']['DBTableName'] = "systemevents";
 	$CFG['Sources']['Source2']['ViewID'] = "SYSLOG";
 */
+$pwd = getenv('DB_PASSWORD');
+if (!$pwd && file_exists('/run/secrets/db_password')) {
+    $pwd = trim(file_get_contents('/run/secrets/db_password'));
+}
 
 $CFG['DefaultSourceID'] = 'Source1';
 
@@ -178,10 +182,10 @@ $CFG['Sources']['Source1']['ViewID'] = 'SYSLOG';
 $CFG['Sources']['Source1']['SourceType'] = SOURCE_DB;
 $CFG['Sources']['Source1']['DBTableType'] = 'monitorware';
 $CFG['Sources']['Source1']['DBType'] = DB_MYSQL;
-$CFG['Sources']['Source1']['DBServer'] = 'database';
-$CFG['Sources']['Source1']['DBName'] = 'syslogdb';
-$CFG['Sources']['Source1']['DBUser'] = 'syslog';
-$CFG['Sources']['Source1']['DBPassword'] = 'syslogpass';
+$CFG['Sources']['Source1']['DBServer'] = getenv('DB_HOST');
+$CFG['Sources']['Source1']['DBName'] = getenv('DB_NAME');
+$CFG['Sources']['Source1']['DBUser'] = getenv('DB_USER');
+$CFG['Sources']['Source1']['DBPassword'] = $pwd ?: '';
 $CFG['Sources']['Source1']['DBTableName'] = 'SystemEvents';
 $CFG['Sources']['Source1']['DBEnableRowCounting'] = false;
 

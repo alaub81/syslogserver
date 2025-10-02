@@ -8,6 +8,10 @@ services:
       - "${SYSLOG_UDP_PORT}:514/udp"
       - "${SYSLOG_TCP_PORT}:514"
     environment:
+      DB_HOST: database
+      DB_NAME: ${DB_NAME:-syslogdb}
+      DB_USER: ${DB_USER:-syslog}
+      DB_PASSWORD: ${DB_PASSWORD:-syslogpass}
       LOGROTATE_CRON: ${LOGROTATE_CRON}
       LOGROTATE_SIZE: ${LOGROTATE_SIZE}
       LOGROTATE_MAX_AGE_DAYS: ${LOGROTATE_MAX_AGE_DAYS}
@@ -35,7 +39,11 @@ services:
         LOGANALYZER_URL: ${LOGANALYZER_URL}
     image: loganalyzer:${LOGANALYZER_VERSION}
     environment:
-      - TZ=${TZ}
+      TZ: ${TZ}
+      DB_HOST: database
+      DB_NAME: ${DB_NAME:-syslogdb}
+      DB_USER: ${DB_USER:-syslog}
+      DB_PASSWORD: ${DB_PASSWORD:-syslogpass}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost/ > /dev/null"]
       interval: 30s
@@ -54,8 +62,11 @@ services:
     image: mariadb:latest
     restart: always
     environment:
-      - MARIADB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
-      - TZ=${TZ}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME:-syslogdb}
+      MARIADB_USER: ${DB_USER:-syslog}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-syslogpass}
+      TZ: ${TZ}
     healthcheck:
       test: ["CMD-SHELL", "mariadb -u root -p$${MARIADB_ROOT_PASSWORD} -e 'SELECT 1'"]
       interval: 10s
@@ -75,9 +86,9 @@ services:
         condition: service_healthy
     environment:
       DB_HOST: database
-      DB_NAME: syslogdb
-      DB_USER: syslog
-      DB_PASSWORD: syslogpass
+      DB_NAME: ${DB_NAME:-syslogdb}
+      DB_USER: ${DB_USER:-syslog}
+      DB_PASSWORD: ${DB_PASSWORD:-syslogpass}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS}
       DBCLEANUP_CRON: ${DBCLEANUP_CRON}
       TZ: ${TZ}

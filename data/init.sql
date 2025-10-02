@@ -2,13 +2,12 @@
 -- Datenbank und Benutzer einrichten
 -- -------------------------------------------
 
-CREATE DATABASE IF NOT EXISTS syslogdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- CREATE DATABASE IF NOT EXISTS syslogdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- CREATE USER IF NOT EXISTS 'syslog'@'%' IDENTIFIED BY '${DB_PASSWORD}';
+-- GRANT ALL PRIVILEGES ON syslogdb.* TO 'syslog'@'%';
+-- FLUSH PRIVILEGES;
 
-CREATE USER IF NOT EXISTS 'syslog'@'%' IDENTIFIED BY 'syslogpass';
-GRANT ALL PRIVILEGES ON syslogdb.* TO 'syslog'@'%';
-FLUSH PRIVILEGES;
-
-USE syslogdb;
+-- USE syslogdb;
 
 -- -------------------------------------------
 -- Haupttabelle für LogAnalyzer
@@ -74,6 +73,4 @@ ALTER TABLE SystemEvents
 CREATE EVENT IF NOT EXISTS cleanup_logs
 ON SCHEDULE EVERY 1 DAY
 DO
-BEGIN
   OPTIMIZE TABLE SystemEvents;
-END;  
