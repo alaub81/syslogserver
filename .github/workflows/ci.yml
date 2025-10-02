@@ -154,7 +154,7 @@ jobs:
         run: |
           NET=$(docker network ls --format '{{.Name}}' | grep syslogserver || true)
           MSG="ci-test-$(date +%s)"
-          docker run --rm --network ${NET:-bridge} busybox sh -c \
+          docker run --rm --network ${NET:-bridge} debian:trixie-slim bash -c \
             "logger -n syslogng -P 514 -d \"$MSG\" || nc -u -w1 syslogng 514 <<<\"<14>$MSG\""
           echo "TEST_MSG=$MSG" >> $GITHUB_ENV
 
