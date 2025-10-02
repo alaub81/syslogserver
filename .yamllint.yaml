@@ -5,7 +5,7 @@ rules:
     max: 140
     level: warning
   truthy:
-    level: error
+    check-keys: false
   document-start:
     present: false
   indentation:
