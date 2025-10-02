@@ -20,8 +20,8 @@ jobs:
           - name: loganalyzer
             dockerfile: Dockerfile-loganalyzer
             context: .
-          - name: syslog-ng
-            dockerfile: Dockerfile-syslog-ng
+          - name: syslogng
+            dockerfile: Dockerfile-syslogng
             context: .
           - name: dbcleanup
             dockerfile: Dockerfile-dbcleanup

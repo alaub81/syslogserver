@@ -60,8 +60,8 @@ jobs:
           - name: loganalyzer
             dockerfile: Dockerfile-loganalyzer
             context: .
-          - name: syslog-ng
-            dockerfile: Dockerfile-syslog-ng
+          - name: syslogng
+            dockerfile: Dockerfile-syslogng
             context: .
           - name: dbcleanup
             dockerfile: Dockerfile-dbcleanup
@@ -142,7 +142,7 @@ jobs:
       - name: Compose up (detached, build)
         run: |
           docker compose --env-file .env.ci up -d --build
-          # Warten bis DB & syslog-ng healthy (max 90s)
+          # Warten bis DB & syslogng healthy (max 90s)
           for i in {1..30}; do
             unhealthy=$(docker compose ps --format json | jq -r '.[] | select(.Health!="" and .Health!="healthy") | .Name' | wc -l)
             [ "$unhealthy" -eq 0 ] && break
