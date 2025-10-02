@@ -29,8 +29,14 @@ RUN set -Eeux; \
     else \
       CONTENT_DIR="$(dirname "$(find "${UNPACK_DIR}" -maxdepth 3 -type f -name index.php | head -n1)")"; \
     fi; \
-    test -n "${CONTENT_DIR}" && [ -f "${CONTENT_DIR}/index.php" ] || { echo "index.php not found after extract"; exit 4; }; \
+    CONTENT_FILE="$(find "${UNPACK_DIR}" -maxdepth 3 -type f -name index.php -print -quit)"; \
+    if [ -n "${CONTENT_FILE}" ]; then \
+      CONTENT_DIR="$(dirname "${CONTENT_FILE}")"; \
+    else \
+      echo "index.php not found after extract"; exit 4; \
+    fi; \
     rm -rf /var/www/html/*; \
     cp -a "${CONTENT_DIR}/." /var/www/html/; \
     chown -R www-data:www-data /var/www/html; \
     rm -rf /tmp/la
+
