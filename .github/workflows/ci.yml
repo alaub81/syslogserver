@@ -166,7 +166,7 @@ jobs:
               FROM SystemEvents
               WHERE Message LIKE '\''%'"$TEST_MSG"'%'\''\G"
           ' | tee /tmp/db_check.txt
-          grep -q "cnt: 1" /tmp/db_check.txt
+          grep -q " 1. row" /tmp/db_check.txt
 
       - name: Show logs on failure
         if: failure()
