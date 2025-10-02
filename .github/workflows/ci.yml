@@ -19,11 +19,10 @@ jobs:
       - name: Hadolint
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          dockerfile: |
-            Dockerfile-*
-            Dockerfile
+          path: .
+          recursive: true
           config: .hadolint.yaml
-          no-fail: false
+          failure-threshold: warning   # oder error
 
       # ShellCheck (alle Shell-Skripte)
       - name: ShellCheck
