@@ -144,11 +144,11 @@ LOGANALYZER_URL=https://download.adiscon.com/loganalyzer/loganalyzer-${LOGANALYZ
 
 ## Configuration syslogng
 
-If you like to have a debug log for the shelly devices or a raw dump log, just rename the disabled config files under `./data/syslog-ng/conf/`
+If you like to have a debug log for the shelly devices or a raw dump log, just copy the disabled config files under `./data/syslog-ng/conf/`
 
 ```bash
-mv ./data/syslog-ng/conf/20-shellylog.conf.disabled ./data/syslog-ng/conf/20-shellylog.conf
-mv ./data/syslog-ng/conf/90-rawlog.conf.disabled ./data/syslog-ng/conf/90-rawlog.conf
+cp ./data/syslog-ng/conf/20-shellylog.conf.disabled ./data/syslog-ng/conf/20-shellylog.conf
+cp ./data/syslog-ng/conf/90-rawlog.conf.disabled ./data/syslog-ng/conf/90-rawlog.conf
 ```
 
 and if application is already running, just restart syslogng container:

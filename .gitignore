@@ -2,3 +2,5 @@
 .DS_Store
 data/syslog-ng/log/*
 resources/loganalyzer*
+data/syslog-ng/config/90-rawlog.conf
+data/syslog-ng/config/20-shellylog.conf
