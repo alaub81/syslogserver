@@ -12,7 +12,6 @@ log {
   parser(p_shelly_level);
   parser(p_shelly_program);
   parser(p_shelly_message);
-  destination(d_mysql);
   # own shelly log for debugging
   destination(d_shelly);
 };
