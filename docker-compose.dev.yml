@@ -1,6 +1,9 @@
 services:
   syslogng:
-    image: ghcr.io/alaub81/syslogng:latest
+    build:
+      context: .
+      dockerfile: Dockerfile-syslogng
+    image: syslogng-mysql:latest
     ports:
       - "${SYSLOG_UDP_PORT}:514/udp"
       - "${SYSLOG_TCP_PORT}:514"
@@ -28,7 +31,13 @@ services:
     restart: unless-stopped
 
   loganalyzer:
-    image: ghcr.io/alaub81/loganalyzer:latest
+    build:
+      context: .
+      dockerfile: Dockerfile-loganalyzer
+      args:
+        LOGANALYZER_VERSION: "${LOGANALYZER_VERSION:-4.1.13}"
+        LOGANALYZER_URL: "${LOGANALYZER_URL:-https://download.adiscon.com/loganalyzer/loganalyzer-4.1.13.tar.gz}"
+    image: loganalyzer:${LOGANALYZER_VERSION:-latest}
     environment:
       TZ: ${TZ}
       DB_HOST: database
@@ -68,7 +77,10 @@ services:
       - ./data/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   dbcleanup:
-    image: ghcr.io/alaub81/dbcleanup:latest
+    build:
+      context: .
+      dockerfile: Dockerfile-dbcleanup
+    image: dbcleanup:latest
     depends_on:
       database:
         condition: service_healthy
