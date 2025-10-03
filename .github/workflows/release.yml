@@ -5,7 +5,7 @@ on:
     branches: [main]
     tags: ['v*.*.*']  # SemVer-Tags pushen ebenfalls
   schedule:
-    - cron: '17 01 * * 2'   # weekly rebuild (Mon 03:17 UTC)  
+    - cron: '17 01 * * 2'   # weekly rebuild (Mon 03:17 UTC)
 
 permissions:
   contents: read
