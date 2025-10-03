@@ -1,217 +1,247 @@
-# 🛰️ SyslogServer (with syslog-ng, MariaDB & Loganalyzer)
+# Syslog Server Docker Stack with Web UI (LogAnalyzer)
 
-A modular Docker-based syslog collection and analysis stack with:
+A production‑ready, multi‑container stack to ingest syslog over UDP/TCP with **syslog‑ng**, persist logs in **MariaDB**, and explore them via the **LogAnalyzer** web UI. It also ships with an optional **dbcleanup** sidecar to prune old rows and a built‑in **logrotate** scheduler for file outputs.
 
-- 🔧 **syslog-ng** (with custom parsers) – structured syslog intake over UDP/TCP and SQL output
-- 🐬 **MariaDB** – stores logs in the `SystemEvents` table
-- 📊 **LogAnalyzer** – web UI for browsing, filtering and analyzing log messages
-- 🧹 **Database Cleanup Service** -  daily cleanup tasks on the `SystemEvents` table
-
-This syslog stack is also optimized for use with **Shelly** devices, whose raw debug messages are parsed and normalized before insertion.
+> This README matches the provided repository snapshot. See `docker-compose.yml` (prebuilt images from GHCR) and `docker-compose.dev.yml` (build locally) for two usage modes.
 
 ---
 
-## 🧱 Components
+## Features
 
-| Service      | Description                                 |
-|--------------|---------------------------------------------|
-| `syslogng`   | Receives, parses and classifies syslog data and sends it to the database |
-| `mariadb`    | Stores structured events (Adiscon schema)   |
-| `loganalyzer`| PHP UI for web-based log inspection         |
-| `cleanupdb`  | supercronic powered database cleanup maintenance service  |
+- **syslog‑ng + MySQL (MariaDB) output**
+  - Listens on UDP/TCP 514, parses Shelly device messages, writes into `SystemEvents`.
+  - Healthcheck and optional log rotation via supercronic + logrotate.
+- **MariaDB** with one‑time bootstrap from `data/init.sql` (schema + indexes + daily OPTIMIZE event).
+- **LogAnalyzer (PHP/Apache)** served from `loganalyzer` container with a bind‑mounted `config.php`.
+- **Cleanup sidecar** (`dbcleanup`) that deletes old rows on a cron schedule and optimizes the table.
+- **Environment‑driven configuration** via `.env`.
+- **Multi‑arch images** (amd64/arm64) & CI pipeline (lint, build, scan, e2e).
 
 ---
 
-## 🚀 Getting Started
+## Architecture
 
-### 1. Clone this repository
+```txt
++-------------+     UDP/TCP 514     +------------+    SQL (MySQL)    +-----------+
+|  Clients    |  ─────────────────▶ |  syslog-ng | ────────────────▶ |  MariaDB  |
++-------------+                     +------------+                   +-----------+
+                                           │                                ▲
+                                           │                                │
+                                           └────────── HTTP 80 ─────────────┘
+                                                          |
+                                                     +----------+
+                                                     |LogAnalyzer|
+                                                     +----------+
+
+Optional: dbcleanup -> runs scheduled DELETE/OPTIMIZE against MariaDB
+```
+
+Containers & key files:
+
+- `syslogng` (image: `ghcr.io/alaub81/syslogng` or built via `Dockerfile-syslogng`)
+  - Config: `data/syslog-ng/config/*.conf`
+  - Entry: `resources/syslogng-entrypoint.sh` (renders logrotate, starts supercronic + syslog‑ng)
+- `database` (image: `mariadb:latest`)
+  - Init SQL: `data/init.sql` (schema, indexes, daily OPTIMIZE event)
+  - Volume: `dbdata` (persistent)
+- `loganalyzer` (image: `ghcr.io/alaub81/loganalyzer` or built via `Dockerfile-loganalyzer`)
+  - Config: `data/loganalyzer/config/config.php` (bind‑mounted to `/var/www/html/config.php`)
+- `dbcleanup` (optional; image: `ghcr.io/alaub81/dbcleanup` or built via `Dockerfile-dbcleanup`)
+  - Script: `resources/dbcleanup.sh`
+  - Entrypoint: `resources/dbcleanup-entrypoint.sh`
+
+---
+
+## Requirements
+
+- Docker Engine 24+ and Docker Compose v2
+- Open ports 514/udp and 514/tcp on the host (or customize via `.env`)
+- Outbound access to GHCR/Docker Hub (unless you build locally)
+
+---
+
+## Quick start
+
+### 1) Clone & configure
 
 ```bash
+cd /opt
 git clone https://github.com/alaub81/syslogserver.git
 cd syslogserver
-```
-
-### 2. Configure `.env`
-
-```bash
 cp .env.example .env
-# Then adjust ports, DB credentials, timezone etc.
+# Edit .env as needed (ports, DB credentials, retention, cron)
 ```
 
-### 3. Run setup
+### 2a) Run with prebuilt images (recommended)
+
+This uses `docker-compose.yml` and pulls images from GHCR.
 
 ```bash
-chmod +x setup.sh
-./setup.sh
+docker compose up -d
 ```
 
-> Will build images, download Loganalyzer, initialize DB, and start all containers.
-> Or force re-download of Loganalyzer:
+### 2b) Develop locally (build from Dockerfiles)
+
+This uses `docker-compose.dev.yml` to build images on your machine.
 
 ```bash
-./setup.sh --force-download
+docker compose -f docker-compose.dev.yml --env-file .env up -d --build
 ```
+
+### 3) LogAnalyzer setup (first run, if config.php does not exist)
+
+Open `http://localhost:${LOGANALYZER_PORT}` (default 8181) and follow the wizard:
+
+- DB Type: **MySQL** (MariaDB)
+- Host: `database`  ·  DB: `${DB_NAME}`  ·  User: `${DB_USER}`  ·  Password: `${DB_PASSWORD}`
+- Source table: `SystemEvents`
+
+> The file `data/loganalyzer/config/config.php` is bind‑mounted as `/var/www/html/config.php`; changes persist in your working tree.
 
 ---
 
-## 🌐 Access & Ports
+## Configuration (.env)
 
-- **LogAnalyzer**: [http://localhost:8181](http://localhost:8181)
-- **Syslog UDP**: `514/udp`
-- **Syslog TCP**: `514/tcp`
+See `.env.example` for documented defaults. Most common settings:
 
-## ⚙️ Configuration Overview
-
-### `.env`
-
-The loganalyzer version can be checked here: [https://loganalyzer.adiscon.com/download/](https://loganalyzer.adiscon.com/download/)
-
-All key settings are externalized:
-
-```env
-# Timezone
+```dotenv
+# Timezone inside containers
 TZ=Europe/Berlin
 
-# Ports
+# Syslog listener ports on the HOST
 SYSLOG_UDP_PORT=514
 SYSLOG_TCP_PORT=514
+
+# LogAnalyzer (HTTP) port on the HOST
 LOGANALYZER_PORT=8181
 
-# Database
-DB_ROOT_PASSWORD=supersecurepassword
-## Delete Database entries older then:
-LOG_RETENTION_DAYS=30
+# MariaDB credentials
+DB_NAME=syslogdb
+DB_USER=syslog
+DB_PASSWORD=changeMe!
+DB_ROOT_PASSWORD=changeRoot!   # only used at initial bootstrap
 
+# Log cleanup (dbcleanup container)
+LOG_RETENTION_DAYS=30          # delete rows older than N days
+DBCLEANUP_CRON=0 3 * * *       # daily at 03:00
+
+# syslog-ng file rotation (if file destinations used)
+LOGROTATE_CRON=0 * * * *       # hourly
+LOGROTATE_SIZE=50M             # rotate at ~50 MB
+LOGROTATE_MAX_AGE_DAYS=14      # delete rotated files older than N days
+LOGROTATE_ROTATIONS=7          # keep N rotated files
+
+# Only needed when you like to build localy with docker-compose.dev.yml
 # Loganalyzer Version (https://loganalyzer.adiscon.com/download/)
 LOGANALYZER_VERSION=4.1.13
+# Configure loganalyzers Download-URL (TGZ)
+LOGANALYZER_URL=https://download.adiscon.com/loganalyzer/loganalyzer-${LOGANALYZER_VERSION}.tar.gz
 ```
 
-### `./data/syslog-ng/config/10-syslogsrv.conf`
-
-- Configured to **receive via UDP & TCP**
-- Writes to **MariaDB database**
-- Shelly parsers
-
-### `init.sql`
-
-- Creates:
-  - Database: `syslogdb`
-  - User: `syslog@%`
-  - Table: `SystemEvents` (compatible with Loganalyzer)
-  - Optional: `SystemEventsProperties`
-
-### ⏰ Database Retention Scheduling
-
-The cleanup schedule is defined in the `resources/dbcleanup.cron` file using standard cron syntax.
-
-```cron
-5 10 * * * /app/dbcleanup.sh
-```
-
-This example runs the cleanup job daily at **10:05 AM** container time. If you change it, you have to rebuild the dbcleanup container.
+> **Tip – ServerName warning**: If Apache logs `Could not reliably determine the server's FQDN`, set `ServerName` (e.g., via a tiny conf) or ignore – it’s harmless.
 
 ---
 
-## 🧩 syslog-ng Features
+## Configuration syslogng
 
-- Parses Shelly logs using `regexp-parser` blocks
-- Extracts fields like `LEVEL`, `PROGRAM`, `MESSAGE`, `PID` from raw payload
-- Logs are normalized into classic syslog fields
-- Output is written into MariaDB using:
-
-```sql
-INSERT INTO SystemEvents (
-  ReceivedAt, DeviceReportedTime,
-  Facility, Priority,
-  FromHost, Message, SysLogTag, Importance
-)
-```
-
----
-
-## 🧠 Shelly Parser Example
-
-Located in `data/syslog-ng/config/10-syslogsrv.conf`:
-
-```syslog-ng
-parser p_shelly_level {
-  regexp-parser(
-    pattern("^(?P<LEVEL>[A-Z]+)")
-    ...
-  );
-};
-```
-
-→ Used in `log { ... parser(p_shelly_level); };` block
-
----
-
-## 🗃️ Database Schema
-
-SystemEvents follows Adiscon LogAnalyzer format:
-
-| Field            | Description                 |
-|------------------|-----------------------------|
-| `ReceivedAt`     | Timestamp at syslog-ng      |
-| `FromHost`       | IP/hostname from device     |
-| `Message`        | Cleaned-up log payload      |
-| `SysLogTag`      | Program name (if present)   |
-| `Importance`     | Drives "Message Type" column in UI |
-| `EventLogType`   | Used in detailed view, optional |
-
----
-
-## 🧪 Test a log
-
-Send a test message:
+If you like to have a debug log for the shelly devices or a raw dump log, just rename the disabled config files under `./data/syslog-ng/conf/`
 
 ```bash
-logger -n 127.0.0.1 -P 514 -d "DEBUG test log from shell"
+mv ./data/syslog-ng/conf/20-shellylog.conf.disabled ./data/syslog-ng/conf/20-shellylog.conf
+mv ./data/syslog-ng/conf/90-rawlog.conf.disabled ./data/syslog-ng/conf/90-rawlog.conf
 ```
 
-Then check Loganalyzer.
+and if application is already running, just restart syslogng container:
+
+´´´bash
+docker compose restart syslogng
+´´´
 
 ---
 
-## ⚙️ Customization
+## Testing the setup
 
-- Shelly-specific parsing rules → `data/syslog-ng/config/10-syslogsrv.conf`
-- SQL output fields can be adapted in the `sql()` block
-- To map `Importance`, add dynamic rules or static override (`Importance => 0`)
+### Send a test message (UDP)
 
----
+From another container on the same compose network:
 
-## 🧹 Database Cleanup Service (`dbcleanup`)
+```bash
+docker run --rm --network $(docker network ls --format '{{.Name}}' | grep syslogserver) debian:trixie-slim bash -lc 'logger -n syslogng -P 514 -d "hello-from-ci-$(date +%s)"'
+```
 
-This project includes a maintenance container called `dbcleanup`, which performs daily cleanup tasks on the `SystemEvents` table inside the MariaDB instance.
+### Or with netcat (UDP)
 
-### ✨ Purpose
+```bash
+echo "hello-from-nc" | nc -u -w1 127.0.0.1 "${SYSLOG_UDP_PORT}"
+```
 
-- Deletes old syslog entries older than a defined number of days.
-- Optimizes the `SystemEvents` table after cleanup.
-- Logs all actions to the syslog server (`syslog-ng`), visible in LogAnalyzer.
+### Verify in DB
 
----
+```bash
+docker compose exec -T database sh -lc 'mariadb -u"$MARIADB_USER" --password="$MARIADB_PASSWORD" -D "$MARIADB_DATABASE" -e "SELECT COUNT(*) FROM SystemEvents;"'
+```
 
-## 🔐 Security Notes
+### Verify in loganalyzer
 
-- Passwords are stored via `.env` – do **not** commit secrets.
-- Do not expose the database or syslog ports directly without firewall/NAT protection.
-- MariaDB allows access from all containers via `%` host match – restrict as needed.
-
----
-
-## 📜 License
-
-This project: GPL-3.0 License
-LogAnalyzer: © Adiscon GmbH  
-syslog-ng: © One Identity
+just open up loganalyzer ui with your browser and check if the message appears.
 
 ---
 
-## 🙌 Credits
+## Health checks
 
-Maintained by [@alaub81](https://github.com/alaub81)  
-Log parsing magic powered by `syslog-ng` + `regexp-parser`
-LogAnalyzer by Adiscon
-MariaDB by the MariaDB Foundation
+- **syslog-ng**: checks `syslog-ng-ctl stats` or UDP 514 socket accessible.
+- **database**: waits until MariaDB is ready & answers SQL.
+- **loganalyzer**: HTTP probe on `/`.
+
+If a service is stuck unhealthy, inspect logs:
+
+```bash
+docker compose logs --no-color syslogng database loganalyzer
+```
+
+---
+
+## Security notes
+
+- Replace all default passwords in `.env` before exposing ports on public networks.
+- Restrict inbound 514/udp + 514/tcp to trusted networks.
+- Keep images updated (CI can rebuild weekly and on base‑image changes).
+
+---
+
+## Development (local build)
+
+```bash
+docker compose -f docker-compose.dev.yml --env-file .env up -d --build
+# Logs
+docker compose logs -f --tail=200 syslogng
+```
+
+To run linters locally (optional):
+
+- Dockerfiles: `hadolint`
+- Shell scripts: `shellcheck`
+- YAML: `yamllint`
+
+---
+
+## Troubleshooting
+
+- **No rows in DB**: check `syslogng` logs for SQL errors (credentials, table names).
+- **DeviceReportedTime/ReceivedAt errors**: ensure timestamps are passed as `YYYY-MM-DD HH:MM:SS` to MariaDB.
+- **Messages also written to files**: remove or disable file destinations in `data/syslog-ng/config/*.conf`.
+- **LogAnalyzer shows missing columns**: confirm your table matches `data/init.sql` (e.g., `ProcessID`, `EventLogType`, etc.).
+- **Healthcheck fails for syslog‑ng**: ensure `syslog-ng-ctl` exists inside the image; optionally install `netcat` if you use the fallback.
+
+---
+
+## License & Security
+
+- License: MIT (see `LICENSE`)
+- Security Policy: see `SECURITY.md` (how to report vulnerabilities)
+
+---
+
+## Changelog
+
+See Git commit history and release notes.

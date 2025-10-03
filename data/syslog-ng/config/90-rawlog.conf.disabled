@@ -1,0 +1,10 @@
+# for debugging
+destination d_rawudp {
+  file("/var/log/raw-udp.log");
+};
+
+# Rawdump for debugging
+log {
+  source(s_udp);
+  destination(d_rawudp);
+};

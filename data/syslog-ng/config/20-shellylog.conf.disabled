@@ -1,0 +1,18 @@
+# for debugging
+destination d_shelly {
+  file("/var/log/shelly.log" template("LEVEL=${SLEVEL:-not_set} PID=${PID:-not_set} SPROG=${PROGRAM:-not_set} MSG=${MESSAGE:-not_set}\n"));
+};
+
+# Shelly Device Logging
+log {
+  source(s_udp);
+  source(s_tcp);
+  filter(f_is_shelly);
+  parser(p_shelly_pid);
+  parser(p_shelly_level);
+  parser(p_shelly_program);
+  parser(p_shelly_message);
+  destination(d_mysql);
+  # own shelly log for debugging
+  destination(d_shelly);
+};

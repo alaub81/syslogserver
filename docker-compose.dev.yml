@@ -18,7 +18,11 @@ services:
       LOGROTATE_ROTATIONS: ${LOGROTATE_ROTATIONS}
       TZ: ${TZ}
     healthcheck:
-      test: ["CMD-SHELL", "/usr/sbin/syslog-ng-ctl stats >/dev/null 2>&1 || nc -z -w 2 127.0.0.1 514"]
+      test:
+        [
+          "CMD-SHELL",
+          "/usr/sbin/syslog-ng-ctl stats >/dev/null 2>&1 || nc -z -w 2 127.0.0.1 514",
+        ]
       interval: 30s
       timeout: 3s
       retries: 10
@@ -68,7 +72,11 @@ services:
       MARIADB_PASSWORD: ${DB_PASSWORD:-syslogpass}
       TZ: ${TZ}
     healthcheck:
-      test: ["CMD-SHELL", "mariadb -u root -p$${MARIADB_ROOT_PASSWORD} -e 'SELECT 1'"]
+      test:
+        [
+          "CMD-SHELL",
+          "mariadb -u root -p$${MARIADB_ROOT_PASSWORD} -e 'SELECT 1'",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5

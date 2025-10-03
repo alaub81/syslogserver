@@ -4,25 +4,25 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # syslog-ng + SQL + logrotate + curl für Binary-Download
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      syslog-ng \
-      syslog-ng-mod-sql \
-      libdbi1 \
-      libdbd-mysql \
-      mariadb-client \
-      logrotate \
-      curl \
-      ca-certificates \
-      tzdata \
-      netcat-openbsd \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends \
+  syslog-ng \
+  syslog-ng-mod-sql \
+  libdbi1 \
+  libdbd-mysql \
+  mariadb-client \
+  logrotate \
+  curl \
+  ca-certificates \
+  tzdata \
+  netcat-openbsd \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
 
 # Supercronic (arch-agnostisch)
 ARG TARGETARCH
 RUN curl -fsSLo /usr/local/bin/supercronic \
-      "https://github.com/aptible/supercronic/releases/download/v0.2.36/supercronic-linux-${TARGETARCH}" \
- && chmod +x /usr/local/bin/supercronic
+  "https://github.com/aptible/supercronic/releases/download/v0.2.36/supercronic-linux-${TARGETARCH}" \
+  && chmod +x /usr/local/bin/supercronic
 
 # EntryPoint: schreibt Logrotate-Config aus ENV + startet Supercronic & syslog-ng
 COPY resources/syslogng-entrypoint.sh /usr/local/bin/syslogng-entrypoint.sh

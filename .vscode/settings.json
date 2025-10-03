@@ -1,0 +1,10 @@
+{
+  "editor.formatOnSave": true,
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+
+  "shellcheck.enable": true,
+  "hadolint.hadolintPath": "hadolint", // falls im PATH
+  "yaml.validate": true
+}
