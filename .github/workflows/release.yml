@@ -3,7 +3,7 @@ name: Release (build & push)
 "on":
   push:
     tags:
-      - "v*.*.*" # SemVer-Tags
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       rebuild_tags:
@@ -17,7 +17,7 @@ name: Release (build & push)
         default: 3
         type: number
   schedule:
-    - cron: "0 1 * * 2" # Dienstag 01:00 UTC
+    - cron: "0 1 * * 2"
 
 permissions:
   contents: read
@@ -111,7 +111,7 @@ jobs:
         with:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.dockerfile }}
-          pull: true # aktualisiert Base-Image
+          pull: true
           push: false
           load: true
           platforms: linux/amd64
