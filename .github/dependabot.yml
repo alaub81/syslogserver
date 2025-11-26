@@ -13,7 +13,7 @@ updates:
     labels: ["dependencies", "github-actions"]
     groups:
       gh-actions:
-        patterns: ["*"] # alle Actions-Updates in eine PR bündeln
+        patterns: ["*"]
 
   # 2) Docker (Dockerfiles + docker-compose.*)
   - package-ecosystem: "docker"
