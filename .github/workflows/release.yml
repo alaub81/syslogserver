@@ -14,7 +14,7 @@ name: Release (build & push)
       num_tags:
         description: "How many recent tags to rebuild"
         required: false
-        default: 3
+        default: 1
         type: number
   schedule:
     - cron: "0 1 * * 2"
