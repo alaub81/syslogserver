@@ -195,7 +195,6 @@ jobs:
       fail-fast: false
       matrix:
         image:
-        image:
           - name: "dbcleanup"
             dockerfile: "Dockerfile-dbcleanup"
             context: "."
