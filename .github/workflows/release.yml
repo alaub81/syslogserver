@@ -195,12 +195,16 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - name: 'mediawiki-custom'
-            dockerfile: 'Dockerfile-mediawiki'
-            context: '.'
-          - name: 'memcachephp'
-            dockerfile: 'Dockerfile-memcachephp'
-            context: '.'
+        image:
+          - name: "dbcleanup"
+            dockerfile: "Dockerfile-dbcleanup"
+            context: "."
+          - name: "loganalyzer"
+            dockerfile: "Dockerfile-loganalyzer"
+            context: "."
+          - name: "syslogng"
+            dockerfile: "Dockerfile-syslogng"
+            context: "."
 
     steps:
       - uses: actions/checkout@v6
