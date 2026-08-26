@@ -12,8 +12,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 # ---- LogAnalyzer Build-Parameter ----
-ARG LOGANALYZER_VERSION=4.1.13
-ARG LOGANALYZER_URL="https://download.adiscon.com/loganalyzer/loganalyzer-${LOGANALYZER_VERSION}.tar.gz"
+ARG LOGANALYZER_VERSION=5.0.1
+ARG LOGANALYZER_URL="https://github.com/rsyslog/loganalyzer/releases/download/v${LOGANALYZER_VERSION}/loganalyzer-${LOGANALYZER_VERSION}.tar.gz"
 
 RUN set -eux; \
   test -n "${LOGANALYZER_VERSION}"; \
