@@ -26,7 +26,7 @@ COPY resources/php-overrides.ini /usr/local/etc/php/conf.d/zz-loganalyzer.ini
 
 # ---- LogAnalyzer Build-Parameter ----
 
-ARG LOGANALYZER_VERSION=5.0.1
+ARG LOGANALYZER_VERSION=5.0.2
 ARG LOGANALYZER_URL="https://github.com/rsyslog/loganalyzer/releases/download/v${LOGANALYZER_VERSION}/loganalyzer-${LOGANALYZER_VERSION}.tar.gz"
 
 RUN set -eux; \
