@@ -258,6 +258,14 @@ Minor and patch updates are grouped separately for Actions and Python lint
 dependencies; Docker images and major upgrades are reviewed per dependency.
 Automerge is disabled. The Dependency Dashboard tracks pending updates.
 
+The three application Dockerfiles refresh package lists and upgrade installed
+Debian packages before installing their dependencies. Their official base images
+already enable the matching Debian security repository. CI and release builds
+re-run the `os-packages` stage with `no-cache-filters`; local fresh builds can use
+`docker compose -f docker-compose.dev.yml --env-file .env build --pull --no-cache`.
+This picks up available package fixes even before a base image is republished.
+Rebuilding an older release tag still uses that tag's Dockerfiles.
+
 Both Compose files use `mariadb:13`. Pulling this tag can install newer minor
 and patch releases within MariaDB 13; Renovate proposes later major versions
 as PRs. Before deploying a new release series, review the

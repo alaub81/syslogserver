@@ -66,7 +66,8 @@ With Docker running, execute:
 ./tests/e2e-check.sh
 ```
 
-The test builds this checkout using `docker-compose.dev.yml` in a unique Compose
+The test builds this checkout with fresh base images and without build-cache
+reuse, using `docker-compose.dev.yml` in a unique Compose
 project with fresh database storage and random loopback-only host ports. It
 uses the shipped standard syslog route, excluding local enabled vendor/debug
 configuration files. It verifies UDP and TCP ingestion into MariaDB, both

@@ -157,6 +157,7 @@ jobs:
         with:
           context: ${{ steps.build-paths.outputs.context }}
           file: ${{ steps.build-paths.outputs.dockerfile }}
+          no-cache-filters: os-packages
           pull: true               # aktualisiert Base-Image
           push: false
           load: true
@@ -199,6 +200,7 @@ jobs:
         with:
           context: ${{ steps.build-paths.outputs.context }}
           file: ${{ steps.build-paths.outputs.dockerfile }}
+          no-cache-filters: os-packages
           platforms: linux/amd64,linux/arm64
           pull: true
           push: true
@@ -261,6 +263,7 @@ jobs:
         with:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.dockerfile }}
+          no-cache-filters: os-packages
           pull: true
           push: false
           load: true
@@ -293,6 +296,7 @@ jobs:
         with:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.dockerfile }}
+          no-cache-filters: os-packages
           platforms: linux/amd64,linux/arm64
           pull: true
           push: true

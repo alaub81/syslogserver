@@ -1,8 +1,9 @@
-FROM debian:trixie-slim
+FROM debian:trixie-slim AS os-packages
 ENV DEBIAN_FRONTEND=noninteractive
 
 # syslog-ng + SQL + logrotate + curl für Binary-Download
 RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
   && apt-get install -y --no-install-recommends \
   syslog-ng \
   syslog-ng-mod-sql \
@@ -16,6 +17,8 @@ RUN apt-get update \
   netcat-openbsd \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
+
+FROM os-packages
 
 # Supercronic (arch-agnostisch)
 ARG TARGETARCH

@@ -1,8 +1,9 @@
-FROM php:8.5-apache
+FROM php:8.5-apache AS os-packages
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -21,6 +22,8 @@ RUN apt-get update \
     && a2enmod rewrite expires \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+FROM os-packages
 
 COPY php-overrides.ini /usr/local/etc/php/conf.d/zz-loganalyzer.ini
 

@@ -1,7 +1,8 @@
-FROM debian:trixie-slim
+FROM debian:trixie-slim AS os-packages
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
   && apt-get install -y --no-install-recommends \
   curl \
   bash \
@@ -10,6 +11,8 @@ RUN apt-get update \
   tzdata \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
+
+FROM os-packages
 
 ARG TARGETARCH
 RUN curl -fsSLo /usr/local/bin/supercronic \

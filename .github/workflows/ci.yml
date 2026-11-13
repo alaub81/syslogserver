@@ -58,6 +58,7 @@ jobs:
         with:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.dockerfile }}
+          no-cache-filters: os-packages
           platforms: linux/amd64
           pull: true
           push: false
@@ -146,6 +147,7 @@ jobs:
         with:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.dockerfile }}
+          no-cache-filters: os-packages
           platforms: linux/amd64,linux/arm64
           pull: true
           push: false

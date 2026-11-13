@@ -56,7 +56,7 @@ services:
 YAML
 
 "${COMPOSE[@]}" config --quiet
-"${COMPOSE[@]}" build --pull
+"${COMPOSE[@]}" build --pull --no-cache
 "${COMPOSE[@]}" up --wait --wait-timeout 180
 "${COMPOSE[@]}" ps
 
