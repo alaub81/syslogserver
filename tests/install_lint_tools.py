@@ -43,7 +43,20 @@ def download(url, checksum, destination):
         raise ValueError(f"Checksum mismatch: {url}")
 
 
+def tool_version(specification):
+    """Reject partially updated manifests before installing any platform asset."""
+    versions = {asset["version"] for asset in specification["assets"].values()}
+    if len(versions) != 1:
+        raise ValueError(f"Expected one version for all assets of {specification['repository']}")
+    tag = versions.pop()
+    if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+        raise ValueError(f"Invalid release tag: {tag}")
+    return tag[1:]
+
+
 def install_binary(name, specification, target_platform):
+    version = tool_version(specification)
+    specification = {**specification, "version": version}
     destination = BIN / name
     if destination.exists() and has_version(destination, specification):
         return
@@ -59,9 +72,13 @@ def install_binary(name, specification, target_platform):
             raise ValueError(
                 f"Install {name} {specification['version']} on PATH first; no asset for {target_platform}"
             )
-        filename, checksum = asset
+        filename = asset["filenameTemplate"].format(version=version)
+        checksum = asset["sha256"]
+        release_base = (
+            f"https://github.com/{specification['repository']}/releases/download/{asset['version']}/"
+        )
         archive_path = TOOLS / filename
-        download(specification["releaseBase"] + filename, checksum, archive_path)
+        download(release_base + filename, checksum, archive_path)
         if filename.endswith(".tar.gz"):
             with tarfile.open(archive_path) as archive:
                 candidates = [
@@ -85,9 +102,12 @@ def main():
     machine = {"aarch64": "arm64", "AMD64": "x86_64"}.get(platform.machine(), platform.machine())
     target_platform = f"{sys.platform}-{machine}"
     specifications = json.loads((ROOT / "lint-tools.json").read_text())
+    # Validate every tool before changing any installed binary.
+    for specification in specifications.values():
+        tool_version(specification)
     for name in ("shellcheck", "hadolint", "actionlint"):
         install_binary(name, specifications[name], target_platform)
-        print(f"Ready: {name} {specifications[name]['version']}", flush=True)
+        print(f"Ready: {name} {tool_version(specifications[name])}", flush=True)
 
 
 if __name__ == "__main__":

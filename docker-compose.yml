@@ -76,7 +76,7 @@ services:
 
   database:
     logging: *service-logging
-    image: mariadb:latest
+    image: mariadb:13
     command:
       - --innodb-buffer-pool-size=${DB_BUFFER_POOL_SIZE:-256M}
       # 1 keeps committed transactions durable; 2 is an explicit tradeoff.

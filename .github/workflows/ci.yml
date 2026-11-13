@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write  # für SARIF Upload (Trivy)
 
 jobs:
   lint:
@@ -19,11 +18,112 @@ jobs:
           python-version: '3.14'
       - name: Run all repository linters
         run: ./tests/linter-check.sh
+      - name: Run regression tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
 
   build_and_scan:
+    name: Build and scan (${{ matrix.image.name }})
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
     needs: lint
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: loganalyzer
+            dockerfile: resources/loganalyzer/Dockerfile
+            context: ./resources/loganalyzer
+          - name: syslogng
+            dockerfile: resources/syslogng/Dockerfile
+            context: ./resources/syslogng
+          - name: dbcleanup
+            dockerfile: resources/dbcleanup/Dockerfile
+            context: ./resources/dbcleanup
+          - name: database
+            dockerfile: ''
+            context: ''
+    env:
+      LOCAL_TAG: ${{ matrix.image.name }}:ci-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Buildx
+        if: matrix.image.dockerfile != ''
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and load scan image
+        if: matrix.image.dockerfile != ''
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.dockerfile }}
+          platforms: linux/amd64
+          pull: true
+          push: false
+          load: true
+          tags: ${{ env.LOCAL_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Pull configured database image
+        if: matrix.image.name == 'database'
+        run: |
+          image=$(docker compose --env-file .env.example -f docker-compose.dev.yml config --format json |
+            jq -er '.services.database.image')
+          docker pull "$image"
+          docker tag "$image" "$LOCAL_TAG"
+
+      - name: Trivy report
+        id: report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          scanners: vuln
+          image-ref: ${{ env.LOCAL_TAG }}
+          format: sarif
+          output: trivy-${{ matrix.image.name }}.sarif
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          limit-severities-for-sarif: true
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Trivy gate (fixable HIGH and CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          scanners: vuln
+          image-ref: ${{ env.LOCAL_TAG }}
+          format: table
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
+          skip-setup-trivy: true
+
+      - name: Keep vulnerability report
+        if: always() && steps.report.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-${{ matrix.image.name }}
+          path: trivy-${{ matrix.image.name }}.sarif
+          retention-days: 7
+          if-no-files-found: error
+
+      # PR checks, including Dependabot/forks, do not require SARIF write access.
+      - name: Upload SARIF on main
+        if: always() && github.event_name == 'push' && steps.report.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-${{ matrix.image.name }}.sarif
+          category: trivy-${{ matrix.image.name }}
+
+  build_multiarch:
+    name: Multi-arch build (${{ matrix.image.name }})
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: build_and_scan
     strategy:
       fail-fast: false
       matrix:
@@ -39,160 +139,48 @@ jobs:
             context: ./resources/dbcleanup
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Docker meta (tags + labels)
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: |
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.image.name }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-
-      - name: Build (multi-arch, no push)
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Build amd64 and arm64
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.dockerfile }}
           platforms: linux/amd64,linux/arm64
+          pull: true
           push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Trivy Image Scan (SARIF)
-      - name: Trivy scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: image
-          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
-          format: sarif
-          output: trivy-${{ matrix.image.name }}.sarif
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-          ignore-unfixed: true
-
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-${{ matrix.image.name }}.sarif
-
-  trivy-pr-local:
-    name: Trivy (PR, local image scan)
-    if: github.event_name == 'pull_request'   # läuft NUR bei PRs (inkl. Dependabot)
+  e2e:
+    name: End-to-end stack test
     runs-on: ubuntu-latest
     needs: lint
-    strategy:
-      matrix:
-        include:
-          - name: syslogng
-            file: resources/syslogng/Dockerfile
-            context: ./resources/syslogng
-          - name: loganalyzer
-            file: resources/loganalyzer/Dockerfile
-            context: ./resources/loganalyzer
-          - name: dbcleanup
-            file: resources/dbcleanup/Dockerfile
-            context: ./resources/dbcleanup
-    env:
-      LOCAL_TAG: ${{ matrix.name }}:pr-${{ github.event.number || github.run_number }}
-
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build and test this checkout
+        run: ./tests/e2e-check.sh
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
-
-      # Build ins lokale Docker laden (kein Push!)
-      - name: Build (no push, load to daemon)
-        uses: docker/build-push-action@v7
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
-          push: false
-          load: true
-          tags: ${{ env.LOCAL_TAG }}
-
-      # Trivy scannt das lokale Image (kein GHCR-Pull nötig)
-      - name: Trivy scan (local image)
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: image
-          image-ref: ${{ env.LOCAL_TAG }}
-          format: 'table'
-          ignore-unfixed: true
-          output: trivy-${{ matrix.name }}.sarif
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-
-  e2e:
+  ci_result:
+    name: CI required
+    if: always()
     runs-on: ubuntu-latest
-    needs: build_and_scan
+    needs: [lint, build_and_scan, build_multiarch, e2e]
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Write CI .env (override)
+      - name: Require all applicable checks to pass
+        env:
+          LINT_RESULT: ${{ needs.lint.result }}
+          SCAN_RESULT: ${{ needs.build_and_scan.result }}
+          MULTIARCH_RESULT: ${{ needs.build_multiarch.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          cat > .env.ci <<'EOF'
-          TZ=Europe/Berlin
-          DB_NAME=syslogdb
-          DB_USER=syslog
-          DB_PASSWORD=ciPassw0rd!
-          DB_ROOT_PASSWORD=ciRootPassw0rd!
-          SYSLOG_UDP_PORT=514
-          SYSLOG_TCP_PORT=514
-          LOGANALYZER_HTTP_PORT=8181
-          LOG_RETENTION_DAYS=7
-          DBCLEANUP_CRON=*/2 * * * *
-          EOF
-
-      - name: Compose up (detached, build)
-        run: |
-          docker compose --env-file .env.ci up -d --build
-          # Warten bis DB & syslogng healthy (max 90s)
-          for _ in {1..30}; do
-            unhealthy=$(docker compose ps --format json | jq -r '.[] | select(.Health!="" and .Health!="healthy") | .Name' | wc -l)
-            [ "$unhealthy" -eq 0 ] && break
-            sleep 3
-          done
-          docker compose ps
-
-      - name: Send test log via busybox logger (UDP)
-        run: |
-          NET=$(docker network ls --format '{{.Name}}' | grep syslogserver || true)
-          MSG="ci-test-$(date +%s)"
-          docker run --rm --network "${NET:-bridge}" debian:trixie-slim bash -c \
-            "logger -n syslogng -P 514 -d \"$MSG\" || nc -u -w1 syslogng 514 <<<\"<14>$MSG\""
-          echo "TEST_MSG=$MSG" >> "$GITHUB_ENV"
-
-      - name: Verify DB contains the test log
-        run: |
-          docker compose exec -T -e TEST_MSG="$TEST_MSG" database sh -lc '
-            mariadb -u"$MARIADB_USER" --password="$MARIADB_PASSWORD" -D "$MARIADB_DATABASE" -Nse \
-            "SELECT COUNT(*) AS cnt
-              FROM SystemEvents
-              WHERE Message LIKE '\''%'"$TEST_MSG"'%'\''\G"
-          ' | tee /tmp/db_check.txt
-          grep -q " 1. row" /tmp/db_check.txt
-
-      - name: Show logs on failure
-        if: failure()
-        run: |
-          docker compose logs --no-color > compose-logs.txt || true
-          sed -n '1,400p' compose-logs.txt
-
-      - name: Tear down
-        if: always()
-        run: docker compose down -v
+          echo "lint=$LINT_RESULT scan=$SCAN_RESULT multiarch=$MULTIARCH_RESULT e2e=$E2E_RESULT"
+          if [[ "$LINT_RESULT" != success || "$SCAN_RESULT" != success || "$E2E_RESULT" != success ]]; then
+            exit 1
+          fi
+          if [[ "$EVENT_NAME" == push && "$MULTIARCH_RESULT" != success ]]; then
+            exit 1
+          fi

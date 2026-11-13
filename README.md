@@ -251,16 +251,24 @@ their documented locations and are also Git-ignored.
 ## Dependency updates
 
 Renovate manages version-update PRs for GitHub Actions, Dockerfiles, Compose
-images, Python lint dependencies and the LogAnalyzer version in its Dockerfile.
+images, Python and native lint tools, LogAnalyzer and Supercronic. Supercronic's
+download URLs in the syslogng and dbcleanup Dockerfiles are updated together.
 New update branches are scheduled for Mondays before 06:00 Europe/Berlin.
 Minor and patch updates are grouped separately for Actions and Python lint
 dependencies; Docker images and major upgrades are reviewed per dependency.
 Automerge is disabled. The Dependency Dashboard tracks pending updates.
 
+Both Compose files use `mariadb:13`. Pulling this tag can install newer minor
+and patch releases within MariaDB 13; Renovate proposes later major versions
+as PRs. Before deploying a new release series, review the
+[MariaDB upgrade guide](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/upgrading)
+and back up the database.
+
 The explicit `ignorePaths` in `renovate.json` keeps `tests/requirements-lint.txt`
 included despite the recommended preset's default exclusion of test directories.
-Supercronic download URLs and the native linter versions, assets and checksums
-in `lint-tools.json` still require manual maintenance.
+Native linter updates in `lint-tools.json` include release tags and SHA-256
+checksums for every listed platform in the same PR. Download filenames are
+derived from the release version; the installer rejects mixed platform versions.
 
 Dependabot version-update PRs are disabled with `open-pull-requests-limit: 0`.
 Keep Dependabot alerts and, if desired, security-update PRs enabled in GitHub's
@@ -269,6 +277,11 @@ to leave alert-driven security updates to Dependabot.
 
 The Renovate GitHub App must be enabled for this repository, and these
 configuration changes must be on the default branch before they take effect.
+
+PRs and main pushes run lint/regression checks, fresh image builds, Trivy scans
+and an isolated [end-to-end stack test](tests/README.md#end-to-end-stack-test).
+Fixable HIGH/CRITICAL findings fail CI. Set `CI required` as a required status
+check in GitHub's main branch rules to enforce the checks before merging.
 
 ## Security and license
 

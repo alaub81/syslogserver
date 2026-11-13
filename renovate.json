@@ -47,6 +47,28 @@
       "datasourceTemplate": "github-tags",
       "depNameTemplate": "rsyslog/loganalyzer",
       "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^resources/(syslogng|dbcleanup)/Dockerfile$/"],
+      "matchStrings": [
+        "https://github\\.com/aptible/supercronic/releases/download/v(?<currentValue>\\d+\\.\\d+\\.\\d+)/supercronic-linux-"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "aptible/supercronic",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Update native linter release tags and SHA-256 checksums together",
+      "managerFilePatterns": ["/^lint-tools\\.json$/"],
+      "matchStringsStrategy": "recursive",
+      "matchStrings": [
+        "\"repository\":\\s*\"(?<depName>[^\"]+)\"[\\s\\S]*?\"assets\":\\s*\\{[\\s\\S]*?\\n    \\}",
+        "\"version\":\\s*\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\",\\s*\"sha256\":\\s*\"(?<currentDigest>[a-f0-9]{64})\""
+      ],
+      "datasourceTemplate": "github-release-attachments",
+      "versioningTemplate": "semver"
     }
   ]
 }
