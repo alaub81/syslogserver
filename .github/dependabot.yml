@@ -2,7 +2,7 @@ version: 2
 # Renovate owns version updates. Keep Dependabot available for security updates.
 # Dependabot alerts and security updates must be enabled in repository settings.
 updates:
-  # 1) GitHub Actions (Workflows)
+  # GitHub Actions security updates.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

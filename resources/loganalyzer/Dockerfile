@@ -27,7 +27,7 @@ FROM os-packages
 
 COPY php-overrides.ini /usr/local/etc/php/conf.d/zz-loganalyzer.ini
 
-# ---- LogAnalyzer Build-Parameter ----
+# LogAnalyzer release and download location.
 
 ARG LOGANALYZER_VERSION=5.0.2
 ARG LOGANALYZER_URL="https://github.com/rsyslog/loganalyzer/releases/download/v${LOGANALYZER_VERSION}/loganalyzer-${LOGANALYZER_VERSION}.tar.gz"

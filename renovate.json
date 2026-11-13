@@ -5,10 +5,16 @@
     "docker:enableMajor"
   ],
   "timezone": "Europe/Berlin",
-  "schedule": ["* 0-5 * * 1"],
-  "labels": ["dependencies"],
+  "schedule": [
+    "* 0-5 * * 1"
+  ],
+  "labels": [
+    "dependencies"
+  ],
   "automerge": false,
-  "vulnerabilityAlerts": { "enabled": false },
+  "vulnerabilityAlerts": {
+    "enabled": false
+  },
   "ignorePaths": [
     "**/node_modules/**",
     "**/bower_components/**",
@@ -19,28 +25,44 @@
   ],
   "packageRules": [
     {
-      "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
       "groupName": "GitHub Actions"
     },
     {
-      "matchManagers": ["pip_requirements"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "matchManagers": [
+        "pip_requirements"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
       "groupName": "Python lint tools"
     },
     {
-      "matchDatasources": ["docker"],
+      "matchDatasources": [
+        "docker"
+      ],
       "groupName": null
     },
     {
-      "matchUpdateTypes": ["major"],
+      "matchUpdateTypes": [
+        "major"
+      ],
       "groupName": null
     }
   ],
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^resources/loganalyzer/Dockerfile$/"],
+      "managerFilePatterns": [
+        "/^resources/loganalyzer/Dockerfile$/"
+      ],
       "matchStrings": [
         "LOGANALYZER_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
@@ -50,7 +72,9 @@
     },
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^resources/(syslogng|dbcleanup)/Dockerfile$/"],
+      "managerFilePatterns": [
+        "/^resources/(syslogng|dbcleanup)/Dockerfile$/"
+      ],
       "matchStrings": [
         "https://github\\.com/aptible/supercronic/releases/download/v(?<currentValue>\\d+\\.\\d+\\.\\d+)/supercronic-linux-"
       ],
@@ -61,13 +85,25 @@
     {
       "customType": "regex",
       "description": "Update native linter release tags and SHA-256 checksums together",
-      "managerFilePatterns": ["/^lint-tools\\.json$/"],
+      "managerFilePatterns": [
+        "/^lint-tools\\.json$/"
+      ],
       "matchStringsStrategy": "recursive",
       "matchStrings": [
         "\"repository\":\\s*\"(?<depName>[^\"]+)\"[\\s\\S]*?\"assets\":\\s*\\{[\\s\\S]*?\\n    \\}",
         "\"version\":\\s*\"(?<currentValue>v\\d+\\.\\d+\\.\\d+)\",\\s*\"sha256\":\\s*\"(?<currentDigest>[a-f0-9]{64})\""
       ],
       "datasourceTemplate": "github-release-attachments",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.*\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\s+version: (?<currentValue>v[\\d.]+)"
+      ],
       "versioningTemplate": "semver"
     }
   ]

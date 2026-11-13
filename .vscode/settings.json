@@ -5,6 +5,6 @@
   "files.trimTrailingWhitespace": true,
 
   "shellcheck.enable": true,
-  "hadolint.hadolintPath": "hadolint", // falls im PATH
+  "hadolint.hadolintPath": "hadolint", // available on PATH
   "yaml.validate": true
 }

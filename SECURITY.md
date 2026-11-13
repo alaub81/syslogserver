@@ -1,71 +1,48 @@
-# Security Policy
+# Security policy
 
-Thank you for helping keep **syslogserver** secure! This document explains which versions are supported and how to report vulnerabilities responsibly.
+## Supported versions
 
-## Supported Versions
+Use the current `main` branch or the latest stable release. The scheduled
+release workflow rebuilds the latest release weekly to pick up available
+package fixes, subject to its vulnerability gate. Older tags are rebuilt only
+when explicitly selected; they do not have a guaranteed maintenance schedule.
 
-| Component / Image Tag | Support Status | Notes |
-|---|---|---|
-| `main` branch | ✅ Supported | Active development; receives security fixes and dependency updates. |
-| Versioned container tags (e.g., `loganalyzer:4.x`, `syslog-ng:…`) | ✅ Supported | Updated for critical security issues when feasible. |
-| Deprecated/archived tags | ⚠️ Best effort | No guarantees for timely patches. |
+Renovate proposes dependency version updates. Trivy scans application images
+and the configured MariaDB image. Fixable HIGH/CRITICAL findings block CI and
+release publishing. The narrow, approved gosu exceptions and their evidence
+are documented in [image scan review](docs/security-scans.md).
 
-> We keep base images and dependencies up to date using **GitHub Actions**, **Dependabot**, **Renovate**, and **Trivy** scans.
+## Reporting a vulnerability
 
-## How to Report a Vulnerability
+Do not put credentials, private logs or exploit details in a public issue.
+When private vulnerability reporting is enabled, use
+[Report a vulnerability](https://github.com/alaub81/syslogserver/security/advisories/new).
+It is currently disabled in the repository settings (checked 2026-11-13).
+Until enabled, contact the maintainer privately through a contact channel
+listed on the [maintainer profile](https://github.com/alaub81). If none is
+available, open an issue requesting a private contact channel without
+including sensitive details.
 
-**Preferred:** Open a private *GitHub Security Advisory* for this repository:
-`Security` → `Advisories` → **Report a vulnerability**
-Direct link: [https://github.com/alaub81/syslogserver/security/advisories/new](https://github.com/alaub81/syslogserver/security/advisories/new)
+Include the affected commit/tag, component, impact and reproduction steps.
+Redact passwords, tokens, device identifiers and private network information
+from logs and screenshots. Response and remediation times depend on maintainer
+availability and upstream fixes; no fixed service-level agreement is provided.
 
-Please include:
+## Deployment
 
-- Affected component/file and **commit or tag** (SHA or release),
-- Clear **description** and **impact**,
-- **Steps to reproduce** / Proof of Concept,
-- Relevant **logs**/screenshots (scrub secrets),
-- Any **mitigations** or fix suggestions you may have.
-
-### Our Response SLAs
-
-- **Acknowledgement:** within **48 hours** (business days).
-- **Triage & severity assignment:** within **5 business days**.
-- **Fix or mitigation:** targeted within **30 days** for High/Critical, best effort otherwise. Timelines may vary based on complexity and upstream dependencies.
-
-We’ll coordinate a disclosure timeline with you and publish a security advisory once a fix or mitigation is available.
-
-## Coordinated Disclosure
-
-- Please **do not disclose** details publicly until a fix/mitigation is available and we have published an advisory.
-- With your permission, we are happy to credit you in the release notes or advisory.
+- Generate a separate password for each database account with `openssl rand -hex 32`.
+- Keep `.env` private and out of Git; changing it does not update existing database accounts.
+- Restrict UDP/TCP listeners and the web UI to trusted networks.
+- The shipped LogAnalyzer configuration has no login enabled. Use appropriate
+  network controls or an authenticated reverse proxy when exposing the UI.
+- Back up MariaDB before upgrades or migrations; keep the existing Compose
+  project name and persistent volume.
 
 ## Scope
 
-### In scope
-
-- This repository: Dockerfiles, Compose files, scripts, configuration, and images; including `syslog-ng` pipelines, MariaDB init/events, `loganalyzer`, and `dbcleanup` containers.
-- Secret handling (`.env`/Docker secrets), DB authentication, configuration parsing.
-
-### Out of scope
-
-(please report upstream and/or submit as informative only)
-
-- Vulnerabilities in **upstream** software (e.g., `syslog-ng`, `php`, `apache`, `mariadb`, base images).
-- Theoretical issues without a realistic exploit path in this project’s context.
-- Denial-of-service by extreme log volume (rate limiting/quotas are operational concerns).
-
-## Safe Harbor
-
-We support **good-faith security research** in your own test environment:
-
-- No access to third-party data, no social engineering, no physical access.
-- Do not intentionally disrupt production systems.
-- Follow applicable laws. Report findings privately (see above).
-
-## Cryptography / PGP (optional)
-
-If you prefer encrypted communication, we can provide a PGP key upon request. Please mention this in your report.
-
----
-
-**Thank you!** Security is a continuous effort—your responsible disclosure helps keep this project safe for everyone.
+Report issues in this repository's Dockerfiles, Compose files, scripts,
+configuration and handling of log data. Report vulnerabilities in upstream
+syslog-ng, LogAnalyzer, PHP, MariaDB or base images to their maintainers as well.
+Test only systems you own or are authorized to assess, and avoid disrupting
+live log ingestion. Coordinate disclosure with the maintainer before publishing
+sensitive vulnerability details.

@@ -1,4 +1,4 @@
-# Local checks
+# Repository checks
 
 ## Lint checks
 
@@ -8,85 +8,117 @@ Run the same checks as the CI lint job:
 ./tests/linter-check.sh
 ```
 
-The command works from any directory and requires Git, Bash and Python 3.10+
-(CI uses Python 3.14). It creates `.lint-venv/` for pinned Python packages and
-`.lint-tools/` for pinned native linters. Matching installations are reused;
-initial setup and version updates require internet access. On macOS, install
-Hadolint at the version specified in `lint-tools.json` on PATH first, for example
-with Homebrew; upstream provides no macOS release binary. Native downloads are
-verified against the SHA-256 checksums in that manifest.
+Requires Git, Bash and Python 3.10+. CI selects Python in
+`.github/workflows/ci.yml`. The command creates `.lint-venv/` for pinned Python
+packages and `.lint-tools/` for pinned native linters. Matching installations
+are reused; first setup and version updates require internet access. On macOS,
+install the Hadolint version in `lint-tools.json` on PATH first (for example
+with Homebrew); upstream provides no macOS release binary.
 
-Renovate tracks each platform's release tag and SHA-256 together using GitHub
-release attachments. The installer derives download names from the version
-and rejects mixed versions across a tool's platforms. When adding an asset,
-keep its `version` and `sha256` fields adjacent and retain the manifest's JSON
-formatting so the recursive Renovate matcher can read each tool's block.
-Hadolint updates on macOS also require the matching version on PATH.
+Checks include tracked and non-ignored untracked files that still exist:
 
-Checks cover tracked and non-ignored untracked files that still exist:
-
-- Text hygiene: UTF-8, LF, final newline, trailing whitespace and merge markers.
+- UTF-8, LF, final newlines, trailing whitespace and merge markers.
 - JSON syntax and duplicate keys (VS Code's commented settings are excluded).
-- ShellCheck for shell scripts and Hadolint for all Dockerfiles.
-- Strict Yamllint using `.yamllint.yaml` and Actionlint for CI/release workflows.
-- Ruff correctness checks for Python using `ruff.toml`.
+- Local Markdown links and documented environment variables.
+- ShellCheck for shell scripts and Hadolint for Dockerfiles.
+- Strict Yamllint and Actionlint for workflows.
+- Ruff correctness checks for Python, targeting the minimum Python 3.10.
 
-Every check runs even when an earlier check fails; the final summary reports
-PASS/FAIL and the command exits nonzero on any failure. It never fixes source
-files or starts containers. Local `.env`, `.local/`, enabled private configuration
-copies and tool environments are excluded through Git's ignore rules. Binary
-files containing NUL bytes are skipped by the text check.
+All checks run even after an earlier failure; the final summary reports
+PASS/FAIL, with a nonzero exit status on failure. No source files are fixed.
+The VS Code task `lint:all` runs this command. `.env`, `.local/`, active private
+configuration copies and tool environments are excluded through Git ignore rules.
 
-The VS Code task `lint:all` runs this same command.
+Native downloads are checked against SHA-256 hashes. Renovate tracks each
+platform's release tag and checksum together. Keep `version` and `sha256`
+adjacent in the manifest and preserve its formatting for the recursive matcher.
+The installer rejects mixed platform versions. Hadolint updates on macOS also
+require the matching version on PATH.
 
-Linting does not run image builds, Trivy scans, runtime configuration validation
-or end-to-end tests. Those remain separate CI checks.
+CI validates both standalone Compose files and compares their resolved runtime
+settings with `python3 tests/check_compose.py`. Only local image names and build
+settings may differ. PHP, syslog-ng and
+cron syntax are checked with the real container tools during E2E.
 
 ## Automated regression tests
-
-Run from the repository root:
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-The cleanup tests use a simulated MariaDB client and require no running stack.
-They cover bounded deletion batches, a fixed retention cutoff, empty results,
-SQL failures and invalid settings.
+These tests require no running stack or network:
 
-Native installer tests check platform version consistency, release URL and
-filename construction, archive extraction and rejection of incorrect checksums
-or executable versions without downloading or executing release binaries.
+- Cleanup: bounded batches, fixed cutoff, empty results, SQL failures and invalid settings.
+- Native installer: version consistency, release URLs, extraction, checksums and executable versions.
+- Release tags: numeric SemVer ordering, invalid tags/counts and safe major/minor/latest aliases.
+- Scan policy: six boundary checks using the real Trivy converter, run in the
+  stack job after Trivy installation (skipped when Trivy is unavailable locally).
 
 ## End-to-end stack test
 
-With Docker running, execute:
+With Docker running:
 
 ```bash
 ./tests/e2e-check.sh
 ```
 
-The test builds this checkout with fresh base images and without build-cache
-reuse, using `docker-compose.dev.yml` in a unique Compose
-project with fresh database storage and random loopback-only host ports. It
-uses the shipped standard syslog route, excluding local enabled vendor/debug
-configuration files. It verifies UDP and TCP ingestion into MariaDB, both
-messages appearing in LogAnalyzer and retention deleting an expired row while
-preserving the fresh messages. Failed runs print the test stack's logs.
-The test removes its own containers, network and database volume on exit.
+The test builds this checkout with fresh base images and no build-cache reuse.
+It uses a unique Compose project, an empty database volume and random
+**loopback-only host ports**. Test configuration copies the shipped templates;
+your local `.env`, enabled Shelly/debug files and running database are excluded.
+The database image is pulled explicitly before startup.
 
-CI runs lint, regressions, image scans and this E2E test for PRs and main pushes.
-Trivy scans the three freshly built application images and the MariaDB image
-selected by Compose. Fixable HIGH/CRITICAL vulnerabilities fail the scan check;
-MEDIUM findings remain in the SARIF report, retained as a workflow artifact for
-seven days even when the gate fails. Code-scanning uploads run only on main pushes.
-Main pushes additionally build amd64 and arm64 images without publishing them.
-Image scans use amd64 on GitHub's runner; E2E uses the host's native architecture.
+The test sends through the published host ports and verifies:
 
-Configure `CI required` as a required status check in the repository's main
-branch protection or ruleset to enforce these results before merging. This
-aggregate check fails if lint, scans or E2E fail or are skipped; multi-arch builds
-are additionally required on main pushes. Automerge remains disabled.
+1. Default standard syslog with Shelly disabled: RFC3164 UDP and two byte-counted
+   RFC5424 TCP frames on one connection.
+2. Shelly enabled in both `sender` and `device` host modes: NUL-delimited records,
+   empty delimiters, trailing NUL, all five levels, script channels 101/102,
+   unknown channels, older headers and incomplete fragments.
+3. Exact SQL messages and metadata, PIDs, priorities, reception time, Unicode,
+   embedded newlines and trailing spaces, without duplicate rows.
+4. Standard syslog still working alongside Shelly, normalized/raw diagnostics
+   and both message types displayed through published HTTP in LogAnalyzer.
+5. Multiple real cleanup batches removing five expired rows while preserving
+   all 30 fresh test rows.
 
-Manual capture/replay tools and private log fixtures from local diagnosis are
-kept under `.local/`; they are not distributed with the stack.
+Failures print the test stack's logs. Exit and signal handlers remove only its
+containers, network and database volume. No live device traffic is needed.
+
+CI builds once per architecture and uses those same images for E2E and scanning:
+
+```bash
+./tests/e2e-check.sh --skip-build
+```
+
+This option requires `syslogng-mysql:latest`, `loganalyzer:dev` and
+`dbcleanup:latest` to have been built from the checkout under test; it never
+pulls published application images as a substitute.
+
+## CI and vulnerability scans
+
+All PRs and main pushes run lint, regressions and Compose validation. Runtime
+changes additionally run the full stack checks on amd64; main pushes also run
+the same builds, E2E and scans on a native arm64 runner. Native runners avoid
+QEMU overhead in CI. Documentation and lint-only changes skip image work; `CI required`
+still verifies the applicable results. A failed change-detection command fails
+CI. New commits cancel superseded CI runs.
+
+Each application image is built once per tested architecture. Per-image caches
+avoid collisions. Only the `os-packages` stage is forcibly refreshed for package
+fixes. Trivy scans each of these images and the actual MariaDB image once,
+then converts JSON into SARIF and a HIGH/CRITICAL gate. Raw JSON and SARIF are
+retained for seven days even when the gate fails. Code-scanning uploads run
+only on main, with separate image/architecture categories. The CVE database is
+cached daily; native lint tools and pip downloads are cached independently.
+
+For a local scan of exported images, `tests/scan-images.sh` also accepts
+`NAME=archive:/absolute/path/image.tar`. This lets a containerized scanner work
+without access to the Docker daemon socket.
+
+See [image scan review](../docs/security-scans.md) for the current MariaDB/gosu
+findings and their analysis. Set `CI required` as a required status check in
+GitHub's main branch protection/ruleset to enforce the results before merging.
+Automerge remains disabled.
+
+Private capture/replay fixtures belong under `.local/` and are not distributed.

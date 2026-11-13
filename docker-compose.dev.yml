@@ -1,3 +1,5 @@
+# Standalone development copy of docker-compose.yml with local image builds.
+# Keep runtime settings identical; tests/check_compose.py verifies parity.
 # SD-card-friendly defaults for a 64-bit Raspberry Pi with >= 2 GiB RAM.
 x-service-logging: &service-logging
   driver: local
@@ -20,7 +22,7 @@ services:
       DB_HOST: database
       DB_NAME: ${DB_NAME:-syslogdb}
       DB_USER: ${DB_USER:-syslog}
-      DB_PASSWORD: ${DB_PASSWORD:-syslogpass}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       LOGROTATE_CRON: ${LOGROTATE_CRON:-0 * * * *}
       LOGROTATE_SIZE: ${LOGROTATE_SIZE:-2M}
       LOGROTATE_MAX_AGE_DAYS: ${LOGROTATE_MAX_AGE_DAYS:-30}
@@ -59,7 +61,7 @@ services:
       DB_HOST: database
       DB_NAME: ${DB_NAME:-syslogdb}
       DB_USER: ${DB_USER:-syslog}
-      DB_PASSWORD: ${DB_PASSWORD:-syslogpass}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "--max-time", "2", "--output", "/dev/null", "http://127.0.0.1/"]
       interval: 5m
@@ -92,12 +94,12 @@ services:
       - --max-connections=30
     tmpfs:
       - /tmp:size=64m,mode=1777
-    restart: always
+    restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
       MARIADB_DATABASE: ${DB_NAME:-syslogdb}
       MARIADB_USER: ${DB_USER:-syslog}
-      MARIADB_PASSWORD: ${DB_PASSWORD:-syslogpass}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       TZ: ${TZ}
     healthcheck:
       test:
@@ -128,7 +130,7 @@ services:
       DB_HOST: database
       DB_NAME: ${DB_NAME:-syslogdb}
       DB_USER: ${DB_USER:-syslog}
-      DB_PASSWORD: ${DB_PASSWORD:-syslogpass}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS}
       DBCLEANUP_CRON: ${DBCLEANUP_CRON}
       DBCLEANUP_BATCH_SIZE: ${DBCLEANUP_BATCH_SIZE:-1000}
@@ -137,6 +139,7 @@ services:
     volumes:
       # Use this checkout's batched cleanup with prebuilt images as well.
       - ./resources/dbcleanup/dbcleanup.sh:/app/dbcleanup.sh:ro
+    restart: unless-stopped
 
 volumes:
   dbdata:

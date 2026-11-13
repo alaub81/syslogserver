@@ -1,306 +1,165 @@
 name: Release (build & push)
 
-'on':
+on:
   push:
-    tags:
-      - 'v*.*.*'            # SemVer-Tags
+    tags: ['v*.*.*']
   workflow_dispatch:
     inputs:
-      rebuild_tags:
-        description: 'Rebuild last N tags'
-        required: false
-        default: false
-        type: boolean
       num_tags:
-        description: 'How many recent tags to rebuild'
+        description: 'Number of recent stable tags to rebuild (1-20)'
         required: false
         default: 1
         type: number
   schedule:
-    - cron: '0 1 * * 2'     # Dienstag 01:00 UTC
+    - cron: '0 1 * * 2'  # Tuesday at 01:00 UTC; refresh the latest release's OS packages.
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  security-events: write
 
+# Serialize publishing so scheduled rebuilds cannot race a new release's aliases.
 concurrency:
-  group: release-${{ github.event_name == 'schedule' && 'schedule' || github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
-  # (A) TAG-REBUILD: nur bei Cron oder manuell (rebuild_tags=true)
   select-tags:
-    if: ${{ github.event_name == 'schedule' || inputs.rebuild_tags }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
-      tags_json: ${{ steps.out.outputs.tags_json }}
-      latest_tag: ${{ steps.out.outputs.latest_tag }}
+      releases: ${{ steps.tags.outputs.releases }}
     steps:
+      # Keep current workflow helpers available when building historical tags.
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.workflow_sha }}
           fetch-depth: 0
+          persist-credentials: false
+      - id: tags
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+          REBUILD_COUNT: ${{ inputs.num_tags || 1 }}
+        run: python3 tests/release_tags.py
 
-      - id: out
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          num="${{ inputs.num_tags }}"
-          [ -z "${num}" ] && num=1
-
-          TAGS="$(git tag --list 'v*.*.*' --sort=-v:refname | head -n "${num}")"
-          printf 'Selected tags:\n%s\n' "${TAGS}"
-
-          # Tags als JSON
-          JSON_TAGS="$(printf '%s\n' "${TAGS}" | jq -R . | jq -s -c .)"
-          echo "tags_json=${JSON_TAGS}" >> "$GITHUB_OUTPUT"
-
-          # NEUSTER Tag (erste Zeile der sortierten Liste)
-          LATEST_TAG="$(printf '%s\n' "${TAGS}" | head -n 1)"
-          echo "latest_tag=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
-
-  rebuild:
+  release:
     needs: select-tags
-    if: ${{ needs.select-tags.outputs.tags_json != '' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
     strategy:
       fail-fast: false
       matrix:
-        tag: ${{ fromJSON(needs.select-tags.outputs.tags_json) }}
-        image:
-          - name: "dbcleanup"
-            dockerfile: "resources/dbcleanup/Dockerfile"
-            context: "./resources/dbcleanup"
-          - name: "loganalyzer"
-            dockerfile: "resources/loganalyzer/Dockerfile"
-            context: "./resources/loganalyzer"
-          - name: "syslogng"
-            dockerfile: "resources/syslogng/Dockerfile"
-            context: "./resources/syslogng"
-
+        release: ${{ fromJSON(needs.select-tags.outputs.releases) }}
+        image: [dbcleanup, loganalyzer, syslogng]
     steps:
-      - name: Checkout at tag
+      - name: Checkout release source
         uses: actions/checkout@v7
         with:
-          ref: ${{ matrix.tag }}
-          fetch-depth: 0
-
-      - name: Resolve build paths for checked-out tag
-        id: build-paths
-        shell: bash
+          ref: ${{ matrix.release.ref }}
+          persist-credentials: false
+      - name: Resolve build paths and registry tags
+        id: paths
         env:
-          IMAGE_NAME: ${{ matrix.image.name }}
-          BUILD_CONTEXT: ${{ matrix.image.context }}
-          DOCKERFILE: ${{ matrix.image.dockerfile }}
+          IMAGE_NAME: ${{ matrix.image }}
+          ALIASES: ${{ join(matrix.release.aliases, ' ') }}
+          OWNER: ${{ github.repository_owner }}
         run: |
-          set -euo pipefail
-          # Older tags still keep Dockerfile-<image> at the repository root.
-          if [[ ! -f "$DOCKERFILE" && -f "Dockerfile-$IMAGE_NAME" ]]; then
-            BUILD_CONTEXT=.
-            DOCKERFILE="Dockerfile-$IMAGE_NAME"
+          context="./resources/$IMAGE_NAME"
+          dockerfile="resources/$IMAGE_NAME/Dockerfile"
+          if [[ ! -f "$dockerfile" && -f "Dockerfile-$IMAGE_NAME" ]]; then
+            context=.
+            dockerfile="Dockerfile-$IMAGE_NAME"
           fi
-          test -f "$DOCKERFILE"
-          echo "context=$BUILD_CONTEXT" >> "$GITHUB_OUTPUT"
-          echo "dockerfile=$DOCKERFILE" >> "$GITHUB_OUTPUT"
-
-      - name: Compute semver tags (strip v + major/minor)
-        id: semver
-        shell: bash
-        run: |
-          set -euo pipefail
-          v="${{ matrix.tag }}"
-          v="${v#v}"                 # v1.45.1 -> 1.45.1
-
-          IFS='.' read -r major minor patch _extra <<< "$v"
-          if [[ -z "${major:-}" || -z "${minor:-}" || -z "${patch:-}" ]]; then
-            echo "Tag is not x.y.z: '$v'" >&2
-            exit 1
-          fi
-
+          test -f "$dockerfile"
           {
-            echo "full=$v"           # 1.45.1
-            echo "minor=$major.$minor" # 1.45
-            echo "major=$major"      # 1
+            echo "context=$context"
+            echo "dockerfile=$dockerfile"
+            echo 'tags<<TAGS'
+            for alias in $ALIASES; do
+              echo "ghcr.io/${OWNER,,}/$IMAGE_NAME:$alias"
+            done
+            echo TAGS
           } >> "$GITHUB_OUTPUT"
-
-      - name: Login to GHCR
-        uses: docker/login-action@v4
+      - uses: docker/setup-qemu-action@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Docker meta (rebuild tag + aliases)
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image.name }}
-          tags: |
-            type=raw,value=${{ steps.semver.outputs.full }}
-            type=raw,value=${{ steps.semver.outputs.minor }}
-            type=raw,value=${{ steps.semver.outputs.major }}
-            type=raw,value=latest,enable=${{ matrix.tag == needs.select-tags.outputs.latest_tag }}
-          labels: |
-            org.opencontainers.image.source=${{ github.repository }}
-
-      # Pre-build (amd64) zum Scannen, nicht pushen
-      - name: Build (scan image)
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - name: Build amd64 image for scanning
         uses: docker/build-push-action@v7
         with:
-          context: ${{ steps.build-paths.outputs.context }}
-          file: ${{ steps.build-paths.outputs.dockerfile }}
-          no-cache-filters: os-packages
-          pull: true               # aktualisiert Base-Image
-          push: false
-          load: true
-          platforms: linux/amd64
-          tags: scan:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Trivy FS (SARIF)
-        uses: aquasecurity/trivy-action@v0.36.0
-        continue-on-error: true
-        with:
-          scan-type: fs
-          format: sarif
-          output: trivy-fs.sarif
-          ignore-unfixed: true
-          # severity: HIGH,CRITICAL
-          severity: CRITICAL
-
-      - name: Upload FS SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-fs.sarif
-          category: trivy-fs-rebuild
-
-      - name: Trivy Image (gate)
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: scan:${{ github.sha }}
-          format: table
-          exit-code: '1'
-          ignore-unfixed: true
-          # severity: HIGH,CRITICAL
-          severity: CRITICAL
-
-      - name: Build & Push (multi-arch, overwrite tag)
-        if: ${{ success() }}
-        uses: docker/build-push-action@v7
-        with:
-          context: ${{ steps.build-paths.outputs.context }}
-          file: ${{ steps.build-paths.outputs.dockerfile }}
-          no-cache-filters: os-packages
-          platforms: linux/amd64,linux/arm64
-          pull: true
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # (B) KLASSISCHER RELEASE: nur bei Tag-Push
-  release:
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - name: "dbcleanup"
-            dockerfile: "resources/dbcleanup/Dockerfile"
-            context: "./resources/dbcleanup"
-          - name: "loganalyzer"
-            dockerfile: "resources/loganalyzer/Dockerfile"
-            context: "./resources/loganalyzer"
-          - name: "syslogng"
-            dockerfile: "resources/syslogng/Dockerfile"
-            context: "./resources/syslogng"
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Login to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Docker meta (semver without v + latest)
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image.name }}
-          tags: |
-            # nimmt v1.2.3 und macht 1.2.3
-            type=semver,pattern={{version}},prefix=
-            type=semver,pattern={{major}}.{{minor}},prefix=
-            type=semver,pattern={{major}},prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
-          labels: |
-            org.opencontainers.image.source=${{ github.repository }}
-
-      # Pre-build (amd64) zum Scannen
-      - name: Pre-build (load for scan)
-        uses: docker/build-push-action@v7
-        with:
-          context: ${{ matrix.image.context }}
-          file: ${{ matrix.image.dockerfile }}
+          context: ${{ steps.paths.outputs.context }}
+          file: ${{ steps.paths.outputs.dockerfile }}
           no-cache-filters: os-packages
           pull: true
-          push: false
           load: true
           platforms: linux/amd64
-          tags: scan:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Trivy Image (SARIF)
+          tags: scan:${{ matrix.image }}
+          cache-from: type=gha,scope=release-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.image }}
+      - name: Scan image once
+        id: scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: scan:${{ github.sha }}
-          format: sarif
-          output: trivy-release.sarif
+          image-ref: scan:${{ matrix.image }}
+          scanners: vuln
+          format: json
+          output: trivy.json
+          severity: MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: true
           exit-code: '0'
-          hide-progress: true
-
-      - name: Trivy Image (enforce severity)
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: scan:${{ github.sha }}
-          # severity: CRITICAL,HIGH
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
-          hide-progress: true
-
-      - name: Build & Push (multi-arch)
+      - name: Generate report and enforce fixable HIGH/CRITICAL gate
+        run: |
+          trivy convert --format sarif --severity MEDIUM,HIGH,CRITICAL --output trivy.sarif trivy.json
+          trivy convert --format table --severity HIGH,CRITICAL --exit-code 1 trivy.json
+      - name: Build arm64 image for scanning
         uses: docker/build-push-action@v7
         with:
-          context: ${{ matrix.image.context }}
-          file: ${{ matrix.image.dockerfile }}
+          context: ${{ steps.paths.outputs.context }}
+          file: ${{ steps.paths.outputs.dockerfile }}
           no-cache-filters: os-packages
-          platforms: linux/amd64,linux/arm64
           pull: true
+          load: true
+          platforms: linux/arm64
+          tags: scan:${{ matrix.image }}-arm64
+          cache-from: type=gha,scope=release-${{ matrix.image }}
+      - name: Scan arm64 image and enforce the same gate
+        env:
+          IMAGE_NAME: ${{ matrix.image }}
+        run: |
+          trivy image --scanners vuln --ignore-unfixed --severity MEDIUM,HIGH,CRITICAL \
+            --timeout 10m --format json --output trivy-arm64.json "scan:$IMAGE_NAME-arm64"
+          trivy convert --format sarif --severity MEDIUM,HIGH,CRITICAL --output trivy-arm64.sarif trivy-arm64.json
+          trivy convert --format table --severity HIGH,CRITICAL --exit-code 1 trivy-arm64.json
+      - name: Keep vulnerability reports
+        if: always() && steps.scan.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-${{ matrix.release.ref }}-${{ matrix.image }}
+          path: |
+            trivy*.json
+            trivy*.sarif
+          retention-days: 7
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish multi-arch images
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ steps.paths.outputs.context }}
+          file: ${{ steps.paths.outputs.dockerfile }}
+          # Both architectures were freshly built and scanned on this builder.
+          # Reuse those exact layers instead of rebuilding OS packages again.
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.paths.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ matrix.release.ref }}
+          cache-from: type=gha,scope=release-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.image }}

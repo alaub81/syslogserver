@@ -1,7 +1,7 @@
 FROM debian:trixie-slim AS os-packages
 ENV DEBIAN_FRONTEND=noninteractive
 
-# syslog-ng + SQL + logrotate + curl für Binary-Download
+# Install syslog-ng with SQL support, logrotate and binary download tools.
 RUN apt-get update \
   && apt-get upgrade -y --no-install-recommends \
   && apt-get install -y --no-install-recommends \
@@ -20,15 +20,15 @@ RUN apt-get update \
 
 FROM os-packages
 
-# Supercronic (arch-agnostisch)
+# Download Supercronic for the target architecture.
 ARG TARGETARCH
 RUN curl -fsSLo /usr/local/bin/supercronic \
   "https://github.com/aptible/supercronic/releases/download/v0.2.51/supercronic-linux-${TARGETARCH}" \
   && chmod +x /usr/local/bin/supercronic
 
-# EntryPoint: schreibt Logrotate-Config aus ENV + startet Supercronic & syslog-ng
+# The entrypoint generates logrotate configuration and starts both processes.
 COPY syslogng-entrypoint.sh /usr/local/bin/syslogng-entrypoint.sh
 RUN chmod +x /usr/local/bin/syslogng-entrypoint.sh
 
-# WICHTIG: syslog-ng bleibt der "Hauptprozess", supercronic läuft im Hintergrund
+# syslog-ng stays in the foreground; Supercronic runs in the background.
 CMD ["/usr/local/bin/syslogng-entrypoint.sh"]

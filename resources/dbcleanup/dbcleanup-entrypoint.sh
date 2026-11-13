@@ -1,14 +1,14 @@
 #!/bin/sh
 set -eu
 
-# Default: täglich 03:00
+# Default: daily at 03:00 in the configured timezone.
 : "${DBCLEANUP_CRON:=0 3 * * *}"
 
-# Cronfile generieren (ein Job pro Zeile möglich)
-# Achtung: Supercronic erwartet KEIN Benutzerfeld (anders als /etc/cron.d/*)
+# Generate the cron file (one job per line).
+# Supercronic expects no user field, unlike system /etc/cron.d files.
 printf '%s %s\n' "${DBCLEANUP_CRON}" "/app/dbcleanup.sh" > /app/dbcleanup.cron
 
 echo "[entrypoint] using schedule: ${DBCLEANUP_CRON} /app/dbcleanup.sh"
 
-# Supercronic starten (optional mit JSON-Logs)
+# Run Supercronic with JSON logs.
 exec /usr/local/bin/supercronic -json /app/dbcleanup.cron

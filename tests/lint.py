@@ -8,6 +8,7 @@ import subprocess
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -95,6 +96,62 @@ def check_json(files):
     return passed
 
 
+def check_markdown(files):
+    """Catch stale local documentation links without requesting external sites."""
+    passed = True
+    for name in files:
+        content = re.sub(r"```[^\n]*\n[\s\S]*?```", "", (ROOT / name).read_text())
+        for target in re.findall(r"\]\(([^\s)]+)\)", content):
+            url = urlsplit(target)
+            if url.scheme or url.netloc:
+                continue
+            destination = (ROOT / name).parent / unquote(url.path) if url.path else ROOT / name
+            if not destination.is_file():
+                print(f"{name}: missing link target: {target}", flush=True)
+                passed = False
+            elif url.fragment and destination.suffix == ".md":
+                anchors = set()
+                counts = {}
+                for heading in re.findall(r"^#{1,6}\s+(.+)$", destination.read_text(), re.M):
+                    anchor = re.sub(r"[^\w\s-]", "", heading.lower()).replace(" ", "-")
+                    count = counts.get(anchor, 0)
+                    counts[anchor] = count + 1
+                    anchors.add(f"{anchor}-{count}" if count else anchor)
+                if unquote(url.fragment) not in anchors:
+                    print(f"{name}: missing Markdown anchor: {target}", flush=True)
+                    passed = False
+    return passed
+
+
+def check_environment(files):
+    """Keep public examples complete without reading the private .env file."""
+    examples = {}
+    passed = True
+    comment = []
+    for number, line in enumerate((ROOT / ".env.example").read_text().splitlines(), 1):
+        if line.startswith("#"):
+            comment.append(line)
+            continue
+        if not line.strip():
+            comment = []
+            continue
+        match = re.fullmatch(r"([A-Z][A-Z0-9_]*)=(.+)", line)
+        if not match or match[1] in examples or not comment:
+            print(f".env.example:{number}: require a unique variable, example value and description", flush=True)
+            passed = False
+        else:
+            examples[match[1]] = match[2]
+        comment = []
+    referenced = set()
+    for name in files:
+        referenced.update(re.findall(r"(?<!\$)\$\{([A-Z][A-Z0-9_]*)", (ROOT / name).read_text()))
+    missing = referenced - examples.keys()
+    if missing:
+        print(f".env.example: undocumented Compose variables: {', '.join(sorted(missing))}", flush=True)
+        passed = False
+    return passed
+
+
 def main():
     if len(sys.argv) != 1:
         print("Usage: ./tests/linter-check.sh", file=sys.stderr)
@@ -122,6 +179,12 @@ def main():
         results.append((label, passed))
 
     check("Text hygiene", files, function=check_text)
+    check("Markdown links", [p for p in files if p.endswith(".md")], function=check_markdown)
+    check(
+        "Environment examples",
+        [p for p in files if Path(p).name.startswith("docker-compose") and p.endswith((".yml", ".yaml"))],
+        function=check_environment,
+    )
     # VS Code settings permit JSON comments and are not strict JSON.
     check(
         "JSON",

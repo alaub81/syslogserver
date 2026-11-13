@@ -1,6 +1,4 @@
 ignored:
-  - DL3008   # pin versions in apt-get (optional; du pinnst via base image)
-  - DL3018   # pin versions in apk/apt (optional)
-  - DL3045   # no sudo in container (irrelevant)
-  - DL3003   # use WORKDIR (du nutzt es bereits meist)
+  # Debian package fixes are refreshed during CI and release builds.
+  - DL3008
 failure-threshold: warning

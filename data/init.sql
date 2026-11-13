@@ -1,18 +1,7 @@
--- -------------------------------------------
--- Datenbank und Benutzer einrichten
--- -------------------------------------------
+-- MariaDB creates the database and application user from MARIADB_* variables.
+-- Init scripts run only when the database volume is empty.
 
--- CREATE DATABASE IF NOT EXISTS syslogdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
--- CREATE USER IF NOT EXISTS 'syslog'@'%' IDENTIFIED BY '${DB_PASSWORD}';
--- GRANT ALL PRIVILEGES ON syslogdb.* TO 'syslog'@'%';
--- FLUSH PRIVILEGES;
-
--- USE syslogdb;
-
--- -------------------------------------------
--- Haupttabelle für LogAnalyzer
--- -------------------------------------------
-
+-- Main LogAnalyzer table.
 CREATE TABLE IF NOT EXISTS SystemEvents (
   ID int unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY,
   CustomerID bigint,
@@ -43,7 +32,7 @@ CREATE TABLE IF NOT EXISTS SystemEvents (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------
--- Zusatzdaten für strukturierte Logs
+-- Properties for structured logs
 -- -------------------------------------------
 
 CREATE TABLE IF NOT EXISTS SystemEventsProperties (
@@ -54,7 +43,7 @@ CREATE TABLE IF NOT EXISTS SystemEventsProperties (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------------
--- Zusatz-Indexe zur Performance-Verbesserung (LogAnalyzer & Filter)
+-- Indexes for LogAnalyzer queries and retention
 -- ------------------------------------------------------------------
 
 ALTER TABLE SystemEvents

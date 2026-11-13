@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for portwatcher
+about: Suggest an idea for syslogserver
 labels: enhancement
 ---
 
