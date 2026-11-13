@@ -47,10 +47,15 @@ LOG_RETENTION_DAYS=7
 DBCLEANUP_CRON="0 0 1 1 *"
 DBCLEANUP_BATCH_SIZE=2
 DBCLEANUP_BATCH_PAUSE=0
+SYSLOG_LOG_STORAGE=./data/syslog-ng/logs
+SYSLOG_LOG_RAM_SIZE=128m
+LOGROTATE_CRON="0 * * * *"
+LOGROTATE_SIZE=50M
+LOGROTATE_ROTATIONS=7
 ENV
 
 # Start with only the shipped standard route, regardless of local enabled files.
-mkdir "$TEST_DIR/syslog-config"
+mkdir "$TEST_DIR/syslog-config" "$TEST_DIR/logs"
 cp data/syslog-ng/config/10-syslogsrv.conf data/syslog-ng/config/90-default.conf "$TEST_DIR/syslog-config/"
 if "$SKIP_BUILD"; then
   SYSLOG_IMAGE=syslogng-mysql:latest
@@ -67,6 +72,7 @@ services:
     image: ${SYSLOG_IMAGE}
     volumes:
       - ${TEST_DIR}/syslog-config:/etc/syslog-ng/conf.d/:ro
+      - ${TEST_DIR}/logs:/var/log
   loganalyzer:
     image: ${LOGANALYZER_IMAGE}
   dbcleanup:

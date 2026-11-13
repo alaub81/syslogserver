@@ -2,6 +2,7 @@
 """Exercise real published UDP/TCP/HTTP ports, Shelly parsing and SQL retention."""
 
 import datetime
+from collections import Counter
 import html
 import json
 from pathlib import Path
@@ -184,6 +185,110 @@ VALUES (NOW() - INTERVAL 8 DAY, NOW() - INTERVAL 8 DAY, 1, 6, 'ci-host', '{self.
         print("PASS: Optional raw and normalized Shelly diagnostics receive messages.", flush=True)
 
 
+
+    def file_rows(self):
+        output = self.run("exec", "-T", "syslogng", "sh", "-ec", '''
+for path in /var/log/events.log /var/log/rotated/events.log-*; do
+  [ -f "$path" ] || continue
+  case "$path" in
+    *.gz) gzip -cd -- "$path" ;;
+    *) cat -- "$path" ;;
+  esac
+done
+''')
+        return [row for line in output.splitlines() if line
+                and self.prefix in (row := json.loads(line)).get("MESSAGE", "")]
+
+    def check_file_history(self, expected=None):
+        expected = self.expected if expected is None else expected
+        deadline = time.monotonic() + 15
+        while True:
+            rows = self.file_rows()
+            actual = Counter(row["MESSAGE"] for row in rows)
+            if actual == Counter(expected.keys()) or time.monotonic() >= deadline:
+                break
+            time.sleep(0.5)
+        if actual != Counter(expected.keys()):
+            raise AssertionError(f"File history differs from SQL expectations: {actual}")
+        mapping = {"host": "HOST", "tag": "PROGRAM", "priority": "LEVEL_NUM", "pid": "PID"}
+        for row in rows:
+            for field, key in mapping.items():
+                if field in expected[row["MESSAGE"]]:
+                    value = int(row[key]) if field in ("priority", "pid") else row[key]
+                    if value != expected[row["MESSAGE"]][field]:
+                        raise AssertionError(f"File metadata mismatch: {field} in {row}")
+        print(f"PASS: JSON file history contains {len(rows)} exact normalized records without duplicates.", flush=True)
+
+    def restart_collector(self):
+        self.run("restart", "--timeout", "10", "syslogng")
+        self.run("up", "--no-deps", "--no-build", "--pull", "never", "--wait",
+                 "--wait-timeout", "90", "syslogng")
+        # Docker can allocate different ephemeral published ports after restart.
+        self.udp_port = self.port("syslogng", 514, "udp")
+        self.tcp_port = self.port("syslogng", 514, "tcp")
+
+    def persistent_files(self):
+        rule = self.run("exec", "-T", "syslogng", "cat", "/etc/logrotate.d/syslogserver")
+        if "size 50M" not in rule or "rotate 7" not in rule:
+            raise AssertionError("Persistent logging must use the standard 50M/7 rotation settings")
+        self.check_file_history()
+        self.run("exec", "-T", "syslogng", "logrotate", "--state",
+                 "/var/lib/logrotate/status", "/etc/logrotate.d/syslogserver")
+        self.run("exec", "-T", "syslogng", "logrotate", "--force", "--state",
+                 "/var/lib/logrotate/e2e-status", "/etc/logrotate.d/syslogserver")
+        # A forced rotation must reopen the active file and keep the old history.
+        self.standard("rotated")
+        self.verify("SQL ingestion continues after file rotation")
+        self.check_file_history()
+        self.restart_collector()
+        self.standard("file-restart")
+        self.verify("SQL ingestion continues after collector restart")
+        self.check_file_history()
+        print("PASS: Persistent file history survives rotation and container restart.", flush=True)
+
+    def ram_files(self):
+        override = self.directory / "override.yml"
+        original = override.read_text()
+        mount = f"- {self.directory}/logs:/var/log"
+        if mount not in original:
+            raise AssertionError("Missing isolated test log directory")
+        override.write_text(original.replace(mount, "- ramlogs:/var/log"))
+        env = self.directory / "stack.env"
+        content = env.read_text().replace('LOGROTATE_CRON="0 * * * *"', 'LOGROTATE_CRON="*/5 * * * *"')
+        content = content.replace("LOGROTATE_SIZE=50M", "LOGROTATE_SIZE=2M")
+        content = content.replace("LOGROTATE_ROTATIONS=7", "LOGROTATE_ROTATIONS=2")
+        content = content.replace("SYSLOG_LOG_STORAGE=./data/syslog-ng/logs", "SYSLOG_LOG_STORAGE=ramlogs")
+        env.write_text(content)
+        self.run("up", "--no-deps", "--no-build", "--pull", "never", "--force-recreate",
+                 "--wait", "--wait-timeout", "90", "syslogng")
+        self.udp_port = self.port("syslogng", 514, "udp")
+        self.tcp_port = self.port("syslogng", 514, "tcp")
+        filesystem = self.run("exec", "-T", "syslogng", "stat", "-f", "-c", "%T", "/var/log")
+        capacity = self.run("exec", "-T", "syslogng", "df", "-kP", "/var/log").splitlines()[-1].split()[1]
+        if filesystem != "tmpfs" or int(capacity) != 128 * 1024:
+            raise AssertionError(f"Expected a 128 MiB tmpfs, got {filesystem}/{capacity} KiB")
+        if self.file_rows():
+            raise AssertionError("RAM mode must not import persistent log history")
+        rule = self.run("exec", "-T", "syslogng", "cat", "/etc/logrotate.d/syslogserver")
+        schedule = self.run("exec", "-T", "syslogng", "cat", "/etc/cron.d/syslogrotate")
+        if "size 2M" not in rule or "rotate 2" not in rule or not schedule.startswith("*/5 * * * * "):
+            raise AssertionError("RAM logging must use 2M/2 rotation checked every five minutes")
+        previous = set(self.expected)
+        self.standard("ram")
+        self.verify("RAM file mode preserves the database and accepts new messages")
+        self.check_file_history({key: value for key, value in self.expected.items() if key not in previous})
+        self.restart_collector()
+        if self.file_rows():
+            raise AssertionError("RAM file history must be discarded when the collector stops")
+        previous = set(self.expected)
+        self.standard("ram-restart")
+        self.verify("Database history survives RAM log reset")
+        self.check_file_history({key: value for key, value in self.expected.items() if key not in previous})
+        if not list((self.directory / "logs/rotated").glob("events.log-*")):
+            raise AssertionError("Switching to RAM must leave persistent archives on the host intact")
+        print("PASS: 128 MiB RAM logs are ephemeral; persistent host archives and SQL history are retained.", flush=True)
+
+
 def main():
     stack = Stack(*sys.argv[1:])
     stack.standard("standard")
@@ -197,6 +302,8 @@ def main():
     stack.shelly("device")
     stack.check_ui()
     stack.check_diagnostics()
+    stack.persistent_files()
+    stack.ram_files()
     stack.retention()
 
 

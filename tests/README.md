@@ -36,7 +36,7 @@ The installer rejects mixed platform versions. Hadolint updates on macOS also
 require the matching version on PATH.
 
 CI validates both standalone Compose files and compares their resolved runtime
-settings with `python3 tests/check_compose.py`. Only local image names and build
+settings in both file/RAM modes with `python3 tests/check_compose.py`. Only local image names and build
 settings may differ. PHP, syslog-ng and
 cron syntax are checked with the real container tools during E2E.
 
@@ -66,6 +66,8 @@ The test builds this checkout with fresh base images and no build-cache reuse.
 It uses a unique Compose project, an empty database volume and random
 **loopback-only host ports**. Test configuration copies the shipped templates;
 your local `.env`, enabled Shelly/debug files and running database are excluded.
+File tests use a disposable host directory and a project-scoped RAM volume;
+they never write into `data/syslog-ng/logs/`.
 The database image is pulled explicitly before startup.
 
 The test sends through the published host ports and verifies:
@@ -79,11 +81,16 @@ The test sends through the published host ports and verifies:
    embedded newlines and trailing spaces, without duplicate rows.
 4. Standard syslog still working alongside Shelly, normalized/raw diagnostics
    and both message types displayed through published HTTP in LogAnalyzer.
-5. Multiple real cleanup batches removing five expired rows while preserving
-   all 30 fresh test rows.
+5. Canonical JSON file history matching the SQL messages/metadata, real file
+   rotation and continued writes after reopen. Persistent files survive a restart.
+6. Switching the same stack to a real 128 MiB tmpfs, with 2 MiB/two-archive
+   rotation checked every five minutes. RAM files reset on restart while SQL
+   history and previous host archives remain intact.
+7. Multiple real cleanup batches removing five expired rows while preserving
+   every fresh test row.
 
 Failures print the test stack's logs. Exit and signal handlers remove only its
-containers, network and database volume. No live device traffic is needed.
+containers, network, database volume and RAM log volume. No live device traffic is needed.
 
 CI builds once per architecture and uses those same images for E2E and scanning:
 

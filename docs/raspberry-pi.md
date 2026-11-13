@@ -52,27 +52,91 @@ search results. Text searches across a long retention window can still scan
 many rows; narrow by time/host where possible. The ordinary host/time/filter
 indexes remain. Existing databases require the optional migration above.
 
-### Standard Raspberry Pi defaults
+### File storage modes
 
-Both Compose files include the tuning below for a **64-bit Pi with at least
-2 GiB RAM**. After configuring `.env`, the production command is simply:
+Both standalone Compose files support the following settings through `.env`.
+Keep the same Compose project name when switching modes so the existing
+`dbdata` volume is reused. MariaDB and its retention are unchanged by this choice.
 
-```bash
-docker compose up -d
+**Standard: persistent host files** (the shipped `.env.example` defaults):
+
+```dotenv
+SYSLOG_LOG_STORAGE=./data/syslog-ng/logs
+SYSLOG_LOG_RAM_SIZE=128m
+LOGROTATE_CRON="0 * * * *"
+LOGROTATE_SIZE=50M
+LOGROTATE_ROTATIONS=7
 ```
 
-Local development uses `docker compose -f docker-compose.dev.yml up -d --build`.
-The former `docker-compose.pi.yml` overlay is no longer needed and has been
-removed. PHP/Apache configuration and the executable cleanup script are mounted
-from this checkout, so the standard prebuilt images also use these settings
-without waiting for a new image release.
+Normalized messages go to `./data/syslog-ng/logs/events.log` as JSON Lines,
+with archives in `./data/syslog-ng/logs/rotated/`. Files survive container
+replacement and `docker compose down --volumes`; deleting the host directory
+removes this history. The seven archives plus the active file can approach
+400 MiB per log before compression, and files can grow beyond the threshold
+between checks. `SYSLOG_LOG_RAM_SIZE` is unused in this mode.
 
-Keep the same Compose project name (`-p`/`COMPOSE_PROJECT_NAME`) when upgrading,
-so Compose reuses the existing `dbdata` volume. Recreating containers applies
-these settings; existing volumes are retained. Existing `.env` values override
-the defaults: consider replacing old `LOGROTATE_SIZE=50M` / `ROTATIONS=7` values
-with `2M` / `2` for the 32 MiB RAM log directory. File rotation is checked hourly
-by default; heavy raw/debug output can still fill this directory between checks.
+**Pi SD-saving trial: 128 MiB RAM logs**:
+
+```dotenv
+SYSLOG_LOG_STORAGE=ramlogs
+SYSLOG_LOG_RAM_SIZE=128m
+LOGROTATE_CRON="*/5 * * * *"
+LOGROTATE_SIZE=2M
+LOGROTATE_ROTATIONS=2
+```
+
+The project-scoped `ramlogs` named volume uses Docker's `local` driver with
+`type=tmpfs`. Despite its volume name, its files are temporary and disappear
+when the last container using it stops. No RAM is reserved up front; 128 MiB
+is the filesystem ceiling. This is the same volatile-log approach as before,
+with four times the previous 32 MiB ceiling and more frequent size checks.
+SQL history remains persistent and follows `LOG_RETENTION_DAYS`.
+
+Apply either preset by recreating the collector:
+
+```bash
+docker compose up -d --wait syslogng
+# For locally built images, use the standalone development file instead:
+docker compose -f docker-compose.dev.yml up -d --build --wait syslogng
+```
+
+Normal file history is enabled by the shipped syslog-ng configuration. Raw UDP
+and extra Shelly debug files remain optional. All use the selected storage and
+share its space. The rotation threshold is not a hard cap; busy diagnostics can
+fill even 128 MiB between checks. Disable unnecessary diagnostic copies after
+testing. Rotated files are compressed, with the newest archive kept uncompressed
+until the next rotation so syslog-ng can finish reopening it.
+
+When changing only the RAM size later, recreate the disposable RAM volume:
+
+```bash
+docker compose stop syslogng
+docker compose rm -f syslogng
+# Replace syslogserver if you use a different Compose project name.
+docker volume rm syslogserver_ramlogs
+docker compose up -d --wait syslogng
+```
+
+Use `-f docker-compose.dev.yml` consistently for a development stack. This removes
+only temporary RAM files; do not remove `dbdata`. Switching to RAM does not
+remove existing host logs, and switching back makes those files available again;
+RAM-only records are not automatically copied to the host directory. Copy a
+snapshot before stopping the RAM collector if you need to preserve its files.
+
+Check the effective storage after startup:
+
+```bash
+docker compose exec syslogng df -h /var/log
+docker compose exec syslogng cat /etc/logrotate.d/syslogserver
+```
+
+### Common low-memory defaults
+
+Both files retain the settings below for a **64-bit Pi with at least 2 GiB RAM**.
+The former Pi overlay is not needed. PHP/Apache settings and the cleanup script
+are mounted from the checkout; SQL batching and normalized file routing come
+from the shared syslog-ng snippets. Use current application images or build the
+development images to get the current entrypoint/rotation defaults.
 
 | Component | Standard setting | Effect / tradeoff |
 | --- | --- | --- |
@@ -80,7 +144,7 @@ by default; heavy raw/debug output can still fill this directory between checks.
 | MariaDB commits | `DB_FLUSH_AT_COMMIT=1` | Keeps durable committed transactions; batching already reduces sync frequency. |
 | MariaDB binlog | Disabled | Avoids a second persistent change stream; no replication or point-in-time recovery. |
 | MariaDB connections | Maximum 30 | Bounds per-connection memory for this small stack. |
-| syslog-ng files | `/var/log` in 32 MiB tmpfs | Optional file diagnostics disappear on restart; database rows stay persistent. |
+| syslog-ng files | Persistent `./data/syslog-ng/logs/` by default; optional 128 MiB RAM mode | Disk mode keeps file history; RAM mode avoids persistent file writes but loses that history on stop. |
 | Temporary files | Bounded tmpfs, including MariaDB `/tmp` (64 MiB) | Avoids temporary disk writes; large sorts/exports may exhaust this space. |
 | Docker service logs | `local`, 3 × 10 MiB per service, no compression | Bounds diagnostic storage and avoids rotation compression CPU cost; still writes to disk. |
 | Apache | At most 8 PHP worker processes | Reserves RAM for ingestion; intended for a few UI users. |
@@ -92,10 +156,11 @@ combined before writeback. It is not a 256 MiB limit on MariaDB's total RAM
 and does not keep the complete log history in memory. Redo logging and durable
 commits remain enabled, so this is not a promise to avoid all disk writes.
 
-**tmpfs** makes scratch files and syslog-ng file diagnostics temporary RAM
-files. The configured sizes are upper bounds, not memory reserved up front.
-Stopping the container discards these files, including PHP sessions under
-`/tmp`; the `dbdata` volume and its ingested application logs remain persistent.
+**tmpfs** makes scratch files, and logs when RAM mode is selected, temporary
+RAM files. The configured sizes are upper bounds, not memory reserved up front.
+Stopping the container discards scratch files, including PHP sessions under
+`/tmp`. RAM-mode log files are also discarded; disk-mode log files and the
+`dbdata` volume remain persistent.
 The 64 MiB database `/tmp` can constrain large disk-spilling sorts/exports.
 
 The **Docker log limit** applies to container stdout/stderr (startup messages,

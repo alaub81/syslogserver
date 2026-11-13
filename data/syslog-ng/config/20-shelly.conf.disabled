@@ -1,6 +1,6 @@
 # Optional Shelly support; disabled by default.
 # Enable by copying this template to 20-shelly.conf (the active file is local).
-# Uses s_udp, s_tcp and d_mysql from 10-syslogsrv.conf.
+# Uses shared listeners and SQL/file destinations from 10-syslogsrv.conf.
 
 # Host column: "sender" keeps the source hostname/IP (default).
 # DNS names depend on the base listener's DNS settings. With Docker Desktop NAT,
@@ -100,6 +100,7 @@ log {
   source(s_shelly_frames);
   shelly_normalize();
   destination(d_mysql);
+  destination(d_events_file);
   flags(flow-control);
 };
 

@@ -3,16 +3,15 @@ set -eu
 
 # Defaults can be overridden through .env or Compose.
 : "${LOGROTATE_CRON:=0 * * * *}"          # hourly
-: "${LOGROTATE_SIZE:=2M}"                 # small files in the 32 MiB log tmpfs
+: "${LOGROTATE_SIZE:=50M}"                 # persistent file mode; use 2M for RAM logs
 : "${LOGROTATE_MAX_AGE_DAYS:=30}"         # maximum age of rotated files in days
-: "${LOGROTATE_ROTATIONS:=2}"             # number of rotated files
+: "${LOGROTATE_ROTATIONS:=7}"             # number of rotated files
 
 # Reopen logs after rotation instead of using copytruncate.
 # Keep rotated files separate from active logs.
 mkdir -p /var/log/rotated /var/lib/logrotate
 cat >/etc/logrotate.d/syslogserver <<EOF
-/var/log/*.log {
-    daily
+/var/log/*.log /var/log/syslog /var/log/messages /var/log/error /var/log/debug {
     size ${LOGROTATE_SIZE}
     rotate ${LOGROTATE_ROTATIONS}
     maxage ${LOGROTATE_MAX_AGE_DAYS}
@@ -21,7 +20,7 @@ cat >/etc/logrotate.d/syslogserver <<EOF
     compress
     delaycompress
     dateext
-    dateformat -%Y%m%d-%H%M
+    dateformat -%Y%m%d-%H%M%S
     sharedscripts
     olddir /var/log/rotated
     postrotate
@@ -30,8 +29,8 @@ cat >/etc/logrotate.d/syslogserver <<EOF
 }
 EOF
 
-# Write the Supercronic schedule.
-printf '%s %s\n' "${LOGROTATE_CRON}" "/usr/sbin/logrotate -s /var/lib/logrotate/status /etc/logrotate.conf" \
+# Run only our rule; distribution rules can overlap its top-level log files.
+printf '%s %s\n' "${LOGROTATE_CRON}" "/usr/sbin/logrotate -s /var/lib/logrotate/status /etc/logrotate.d/syslogserver" \
   > /etc/cron.d/syslogrotate
 
 echo "[entrypoint] logrotate schedule: ${LOGROTATE_CRON}"

@@ -1,4 +1,4 @@
-# SD-card-friendly defaults for a 64-bit Raspberry Pi with >= 2 GiB RAM.
+# Persistent file logs by default; .env can select the SD-card-friendly RAM volume.
 x-service-logging: &service-logging
   driver: local
   options:
@@ -19,9 +19,9 @@ services:
       DB_USER: ${DB_USER:-syslog}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       LOGROTATE_CRON: ${LOGROTATE_CRON:-0 * * * *}
-      LOGROTATE_SIZE: ${LOGROTATE_SIZE:-2M}
+      LOGROTATE_SIZE: ${LOGROTATE_SIZE:-50M}
       LOGROTATE_MAX_AGE_DAYS: ${LOGROTATE_MAX_AGE_DAYS:-30}
-      LOGROTATE_ROTATIONS: ${LOGROTATE_ROTATIONS:-2}
+      LOGROTATE_ROTATIONS: ${LOGROTATE_ROTATIONS:-7}
       TZ: ${TZ}
     healthcheck:
       test: ["CMD", "/usr/sbin/syslog-ng-ctl", "healthcheck", "--timeout", "2"]
@@ -32,11 +32,8 @@ services:
       start_interval: 10s
     volumes:
       - ./data/syslog-ng/config:/etc/syslog-ng/conf.d/
-      # File diagnostics are temporary; application records stay in MariaDB.
-      - type: tmpfs
-        target: /var/log
-        tmpfs:
-          size: 33554432
+      # A relative/absolute path persists files; ramlogs selects the tmpfs volume.
+      - "${SYSLOG_LOG_STORAGE:-./data/syslog-ng/logs}:/var/log"
     tmpfs:
       - /tmp:size=16m,mode=1777
       - /var/lib/logrotate:size=1m
@@ -132,3 +129,9 @@ services:
 
 volumes:
   dbdata:
+  ramlogs:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=${SYSLOG_LOG_RAM_SIZE:-128m},mode=0755"

@@ -1,12 +1,12 @@
 # Syslog Server with LogAnalyzer
 
 A Docker Compose stack that receives syslog over UDP/TCP, stores messages in
-MariaDB, and displays them in LogAnalyzer. Optional Shelly support handles
+MariaDB and rotating files, and displays them in LogAnalyzer. Optional Shelly support handles
 NUL-delimited debug output entirely inside syslog-ng.
 
 | Service | Purpose |
 | --- | --- |
-| `syslogng` | Receives UDP/TCP on port 514 and writes messages to MariaDB. |
+| `syslogng` | Receives UDP/TCP on port 514 and writes to MariaDB and `events.log`. |
 | `database` | MariaDB with persistent storage in the `dbdata` volume. |
 | `loganalyzer` | Web UI for browsing and searching the collected messages. |
 | `dbcleanup` | Deletes expired messages in small, scheduled batches. |
@@ -50,7 +50,8 @@ docker compose exec -T syslogng syslog-ng --syntax-only --no-caps
 docker compose exec -T syslogng syslog-ng-ctl reload
 ```
 
-Shelly parsing and diagnostic file logging are disabled by default.
+Shelly parsing and additional raw/debug files are disabled by default.
+Normal file history is enabled in `./data/syslog-ng/logs/events.log` (JSON Lines).
 
 ### Build locally
 
@@ -61,6 +62,16 @@ docker compose -f docker-compose.dev.yml up -d --build --wait
 The development file is standalone and can also be started directly from
 VS Code using the `compose:dev:up` build task. No extra parameters are needed.
 Use the same Compose file and project name for subsequent commands.
+
+### File storage
+
+The standard keeps files in `./data/syslog-ng/logs/`, checks rotation hourly at
+50 MiB and retains seven archives per file. For SD-card-friendly Pi operation,
+select the `ramlogs` storage in `.env`: a 128 MiB temporary RAM directory, with
+2 MiB rotation checked every five minutes and two archives. Both standalone
+Compose files support either mode without extra command parameters.
+See [file storage modes](docs/raspberry-pi.md#file-storage-modes) for the settings.
+MariaDB history stays persistent in both modes.
 
 ## Documentation
 

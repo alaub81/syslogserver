@@ -12,7 +12,8 @@
 | `LOG_RETENTION_DAYS`, `DBCLEANUP_CRON` | Retention period and cleanup schedule. |
 | `DBCLEANUP_BATCH_SIZE`, `DBCLEANUP_BATCH_PAUSE` | Rows per cleanup transaction and pause between full batches. |
 | `DB_BUFFER_POOL_SIZE`, `DB_FLUSH_AT_COMMIT` | MariaDB RAM and commit durability. |
-| `LOGROTATE_*` | Rotation settings for optional file diagnostics. |
+| `SYSLOG_LOG_STORAGE`, `SYSLOG_LOG_RAM_SIZE` | Persistent host files or a bounded RAM log volume. |
+| `LOGROTATE_*` | File rotation threshold, schedule, age and archive count. |
 
 The schema in `data/init.sql` runs only when MariaDB initializes a **new** volume.
 Changing `.env` credentials does not update accounts in an existing database.
@@ -32,7 +33,7 @@ Snippets under `data/syslog-ng/config/` are loaded in filename order:
 
 | File | Purpose |
 | --- | --- |
-| `10-syslogsrv.conf` | Shared listeners, standard parsers and SQL destination. |
+| `10-syslogsrv.conf` | Shared listeners, standard parsers and SQL/file destinations. |
 | `15-rawlog.conf.disabled` | Optional raw UDP file logging before vendor routing. |
 | `20-shelly.conf.disabled` | Optional Shelly detection, framing, parsing and routing. |
 | `shelly-debug/30-debug.conf.disabled` | Optional Shelly diagnostics, included only by the enabled Shelly module. |
@@ -74,6 +75,26 @@ Shelly UDP uptime is not treated as a Unix timestamp; reception time is used.
 Known script channels 101/102 receive the `shelly-script` tag; other unfamiliar
 formats remain visible under `shelly-other`.
 
+### Normal file history
+
+All ingested messages are written to `/var/log/events.log` alongside MariaDB.
+It uses JSON Lines so Unicode, embedded newlines and trailing spaces remain
+unambiguous. Standard syslog and enabled Shelly parsing use the same normalized
+fields in the SQL and file paths. File retention and SQL retention are separate.
+
+By default `/var/log` is bound to `./data/syslog-ng/logs/`, including its
+`rotated/` archives. Files survive container replacement and a Compose volume
+reset because this is a host directory. The directory is excluded from Git.
+Selecting `SYSLOG_LOG_STORAGE=ramlogs` uses the optional 128 MiB tmpfs instead;
+these files disappear when the last container using that volume stops.
+See [storage modes](raspberry-pi.md#file-storage-modes) for both complete presets.
+
+If an existing local `20-shelly.conf` predates normal file history, add
+`destination(d_events_file);` immediately after `destination(d_mysql);` in
+its normalized Shelly log path, or update it from the shipped template while
+preserving your host-mode/custom settings. Existing active copies are not
+silently overwritten during an upgrade.
+
 ### Optional file diagnostics
 
 ```bash
@@ -82,10 +103,10 @@ cp data/syslog-ng/config/shelly-debug/30-debug.conf.disabled data/syslog-ng/conf
 ```
 
 Raw UDP diagnostics work independently of Shelly support. Shelly diagnostics
-are loaded only by the active Shelly module. File output is rotated by the
-syslog-ng container's logrotate scheduler. These files live in a bounded
-32 MiB RAM directory and disappear when the container stops. To retain a
-diagnostic snapshot after enabling the corresponding output:
+are loaded only by the active Shelly module. All `.log` files and the internal
+syslog/messages/error/debug files share the configured rotation policy.
+Diagnostic files use the same persistent directory or RAM volume as `events.log`.
+To copy a diagnostic snapshot out of RAM mode:
 
 ```bash
 mkdir -p .local/logs
@@ -108,11 +129,12 @@ files by changing their suffix to `.conf.legacy`, then use the current templates
 
 ## Raspberry Pi and database retention
 
-Both Compose files include SD-card-friendly defaults for a 64-bit Raspberry Pi
-with at least 2 GiB RAM: bounded tmpfs storage, smaller PHP/Apache limits,
-MariaDB memory settings and bounded Docker logs. No additional Pi overlay is
-required. Use the normal production or development command in the [quick start](../README.md#quick-start) and keep the
-same project name when upgrading.
+Both Compose files retain modest PHP/Apache and MariaDB memory settings,
+bounded scratch tmpfs and bounded Docker logs for a 64-bit Raspberry Pi with
+at least 2 GiB RAM. File storage defaults to disk; select `ramlogs` and the
+small-file preset to avoid persistent syslog file writes. No Pi overlay is needed.
+Use the normal production or development command in the
+[quick start](../README.md#quick-start) and keep the same project name when upgrading.
 
 SQL ingestion uses transactions of up to 100 records with a 1,000 ms batch
 timeout. Retention deletes bounded batches using a fixed cutoff and the
