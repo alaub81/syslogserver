@@ -12,43 +12,13 @@ permissions:
 jobs:
   lint:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        dockerfile:
-          - Dockerfile-loganalyzer
-          - Dockerfile-syslogng
-          - Dockerfile-dbcleanup
-          # optional: falls du zusätzlich einen "Dockerfile" im Root hast
-          # - Dockerfile
     steps:
       - uses: actions/checkout@v7
-
-      - name: Hadolint
-        uses: hadolint/hadolint-action@v3.5.0
+      - uses: actions/setup-python@v7
         with:
-          dockerfile: ${{ matrix.dockerfile }}   # <-- genau 1 Datei
-          config: .hadolint.yaml
-          failure-threshold: warning
-
-      # ShellCheck (alle Shell-Skripte)
-      - name: ShellCheck
-        uses: ludeeus/action-shellcheck@2.0.0
-        with:
-          scandir: .
-          # Beispiel-Excludes – falls du welche brauchst:
-          ignore_names: |
-            *.log
-            *.sql
-
-      # Yamllint (.yml/.yaml)
-      - name: Yamllint
-        uses: ibiqlik/action-yamllint@v3
-        with:
-          config_file: .yamllint.yaml
-          file_or_dir: |
-            .
-          strict: true
+          python-version: '3.14'
+      - name: Run all repository linters
+        run: ./tests/linter-check.sh
 
   build_and_scan:
     runs-on: ubuntu-latest
@@ -59,14 +29,14 @@ jobs:
       matrix:
         image:
           - name: loganalyzer
-            dockerfile: Dockerfile-loganalyzer
-            context: .
+            dockerfile: resources/loganalyzer/Dockerfile
+            context: ./resources/loganalyzer
           - name: syslogng
-            dockerfile: Dockerfile-syslogng
-            context: .
+            dockerfile: resources/syslogng/Dockerfile
+            context: ./resources/syslogng
           - name: dbcleanup
-            dockerfile: Dockerfile-dbcleanup
-            context: .
+            dockerfile: resources/dbcleanup/Dockerfile
+            context: ./resources/dbcleanup
     steps:
       - uses: actions/checkout@v7
 
@@ -128,14 +98,14 @@ jobs:
       matrix:
         include:
           - name: syslogng
-            file: Dockerfile-syslogng
-            context: .
+            file: resources/syslogng/Dockerfile
+            context: ./resources/syslogng
           - name: loganalyzer
-            file: Dockerfile-loganalyzer
-            context: .
+            file: resources/loganalyzer/Dockerfile
+            context: ./resources/loganalyzer
           - name: dbcleanup
-            file: Dockerfile-dbcleanup
-            context: .
+            file: resources/dbcleanup/Dockerfile
+            context: ./resources/dbcleanup
     env:
       LOCAL_TAG: ${{ matrix.name }}:pr-${{ github.event.number || github.run_number }}
 
@@ -163,7 +133,7 @@ jobs:
           image-ref: ${{ env.LOCAL_TAG }}
           format: 'table'
           ignore-unfixed: true
-          output: trivy-${{ matrix.image.name }}.sarif
+          output: trivy-${{ matrix.name }}.sarif
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH,MEDIUM'
 
@@ -192,7 +162,7 @@ jobs:
         run: |
           docker compose --env-file .env.ci up -d --build
           # Warten bis DB & syslogng healthy (max 90s)
-          for i in {1..30}; do
+          for _ in {1..30}; do
             unhealthy=$(docker compose ps --format json | jq -r '.[] | select(.Health!="" and .Health!="healthy") | .Name' | wc -l)
             [ "$unhealthy" -eq 0 ] && break
             sleep 3
@@ -203,9 +173,9 @@ jobs:
         run: |
           NET=$(docker network ls --format '{{.Name}}' | grep syslogserver || true)
           MSG="ci-test-$(date +%s)"
-          docker run --rm --network ${NET:-bridge} debian:trixie-slim bash -c \
+          docker run --rm --network "${NET:-bridge}" debian:trixie-slim bash -c \
             "logger -n syslogng -P 514 -d \"$MSG\" || nc -u -w1 syslogng 514 <<<\"<14>$MSG\""
-          echo "TEST_MSG=$MSG" >> $GITHUB_ENV
+          echo "TEST_MSG=$MSG" >> "$GITHUB_ENV"
 
       - name: Verify DB contains the test log
         run: |

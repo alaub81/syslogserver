@@ -1,0 +1,107 @@
+# Optional Shelly support; disabled by default.
+# Enable by copying this template to 20-shelly.conf (the active file is local).
+# Uses s_udp, s_tcp and d_mysql from 10-syslogsrv.conf.
+
+# Host column: "sender" keeps the source hostname/IP (default).
+# DNS names depend on the base listener's DNS settings. With Docker Desktop NAT,
+# use "device" in the local active copy to distinguish Shelly hardware IDs.
+@define shelly-host-mode "sender"
+
+filter f_is_shelly {
+  match("^shelly[[:alnum:]_.-]*(?:[[:space:]]|$)" value("MESSAGE"));
+};
+
+# Native fan-out: wrap each NUL-separated record in an RFC5424 message with
+# an RFC6587 byte count. The private TCP source emits one event per frame.
+# Byte counts preserve embedded newlines, UTF-8 and trailing spaces.
+# Framing and normalization run inside syslog-ng with no extra public listener.
+rewrite r_shelly_frames {
+  set("<14>1 ${R_ISODATE} ${HOST} shelly - - - "
+      value(".shelly.frame_prefix"));
+  subst('([^\x00]+)\x00*',
+        "$(+ $(length ${.shelly.frame_prefix}) $(length ${1})) ${.shelly.frame_prefix}${1}",
+        value("MESSAGE") flags(global,store-matches));
+};
+destination d_shelly_frames {
+  network("127.0.0.1" transport(tcp) port(1514)
+          template("${MESSAGE}") template-escape(no));
+};
+source s_shelly_frames {
+  syslog(ip("127.0.0.1") transport(tcp) port(1514) log-msg-size(131072)
+         log-iw-size(10000));
+};
+
+parser p_shelly_device {
+  regexp-parser(
+    patterns("^(?<device>shelly[[:alnum:]_.-]+)(?:[[:space:]]|$)")
+    prefix(".shelly.")
+  );
+};
+parser p_shelly_header {
+  regexp-parser(
+    # UDP has a channel field; older/MQTT-style records can omit it.
+    patterns("^shelly[[:alnum:]_.-]+[ ]+(?<sequence>[0-9]+)[ ]+(?<uptime>[0-9]+(?:\\.[0-9]+)?)[ ]+(?:(?<channel>[0-9]+)[ ]+)?(?<level>[0-4])\\|(?<text>[\\s\\S]*)$")
+    prefix(".shelly.")
+  );
+};
+parser p_shelly_location {
+  regexp-parser(
+    template("${.shelly.text}")
+    patterns("^(?<program>[A-Za-z0-9_][A-Za-z0-9_.-]*):(?<line>[0-9]+)[ \\t]+(?<body>[\\s\\S]*)$")
+    prefix(".shelly.")
+  );
+};
+
+# Failed optional parsers never discard a record. Script print() output and
+# JSON fragments do not require a file:line prefix. A source line is not a PID.
+block log shelly_normalize() {
+  rewrite {
+    set("shelly-other" value("PROGRAM"));
+    set("0" value("PID"));
+  };
+  if {
+    parser(p_shelly_device);
+    if ("`shelly-host-mode`" == "device") {
+      rewrite { set("${.shelly.device}" value("HOST")); };
+    };
+  };
+  if {
+    parser(p_shelly_header);
+    rewrite {
+      set("${.shelly.text}" value("MESSAGE"));
+      set-severity("$(if ('${.shelly.level}' == '0') '3' $(if ('${.shelly.level}' == '1') '4' $(if ('${.shelly.level}' == '2') '6' '7')))");
+    };
+    if (match("^(101|102)$" value(".shelly.channel"))) {
+      rewrite { set("shelly-script" value("PROGRAM")); };
+    } elif (match("^(2)?$" value(".shelly.channel"))) {
+      if {
+        parser(p_shelly_location);
+        rewrite {
+          set("${.shelly.program}" value("PROGRAM"));
+          set("${.shelly.program}:${.shelly.line}" value(".event.source"));
+          set("${.shelly.body}" value("MESSAGE"));
+        };
+      };
+    };
+  };
+};
+
+# Claim Shelly inputs before the generic route. A top-level filter ensures
+# flags(final) applies only to matching records; all other syslog continues.
+log {
+  source(s_udp);
+  source(s_tcp);
+  filter(f_is_shelly);
+  rewrite(r_shelly_frames);
+  destination(d_shelly_frames);
+  flags(final,flow-control);
+};
+log {
+  source(s_shelly_frames);
+  shelly_normalize();
+  destination(d_mysql);
+  flags(flow-control);
+};
+
+# Debug snippets are loaded only while this Shelly module is enabled.
+@include "/etc/syslog-ng/conf.d/shelly-debug/*.conf"

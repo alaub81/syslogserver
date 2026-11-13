@@ -1,0 +1,10 @@
+# Optional diagnostic output, normalized exactly like the SQL log path.
+destination d_shelly {
+  file("/var/log/shelly.log"
+       template("$(format-json --key HOST --key PROGRAM --key PID --key MESSAGE --key LEVEL_NUM --key .shelly.*)\n"));
+};
+log {
+  source(s_shelly_frames);
+  shelly_normalize();
+  destination(d_shelly);
+};

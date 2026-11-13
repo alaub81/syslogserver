@@ -71,14 +71,14 @@ jobs:
         tag: ${{ fromJSON(needs.select-tags.outputs.tags_json) }}
         image:
           - name: "dbcleanup"
-            dockerfile: "Dockerfile-dbcleanup"
-            context: "."
+            dockerfile: "resources/dbcleanup/Dockerfile"
+            context: "./resources/dbcleanup"
           - name: "loganalyzer"
-            dockerfile: "Dockerfile-loganalyzer"
-            context: "."
+            dockerfile: "resources/loganalyzer/Dockerfile"
+            context: "./resources/loganalyzer"
           - name: "syslogng"
-            dockerfile: "Dockerfile-syslogng"
-            context: "."
+            dockerfile: "resources/syslogng/Dockerfile"
+            context: "./resources/syslogng"
 
     steps:
       - name: Checkout at tag
@@ -86,6 +86,24 @@ jobs:
         with:
           ref: ${{ matrix.tag }}
           fetch-depth: 0
+
+      - name: Resolve build paths for checked-out tag
+        id: build-paths
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ matrix.image.name }}
+          BUILD_CONTEXT: ${{ matrix.image.context }}
+          DOCKERFILE: ${{ matrix.image.dockerfile }}
+        run: |
+          set -euo pipefail
+          # Older tags still keep Dockerfile-<image> at the repository root.
+          if [[ ! -f "$DOCKERFILE" && -f "Dockerfile-$IMAGE_NAME" ]]; then
+            BUILD_CONTEXT=.
+            DOCKERFILE="Dockerfile-$IMAGE_NAME"
+          fi
+          test -f "$DOCKERFILE"
+          echo "context=$BUILD_CONTEXT" >> "$GITHUB_OUTPUT"
+          echo "dockerfile=$DOCKERFILE" >> "$GITHUB_OUTPUT"
 
       - name: Compute semver tags (strip v + major/minor)
         id: semver
@@ -95,15 +113,17 @@ jobs:
           v="${{ matrix.tag }}"
           v="${v#v}"                 # v1.45.1 -> 1.45.1
 
-          IFS='.' read -r major minor patch extra <<< "$v"
+          IFS='.' read -r major minor patch _extra <<< "$v"
           if [[ -z "${major:-}" || -z "${minor:-}" || -z "${patch:-}" ]]; then
             echo "Tag is not x.y.z: '$v'" >&2
             exit 1
           fi
 
-          echo "full=$v"           >> "$GITHUB_OUTPUT"   # 1.45.1
-          echo "minor=$major.$minor" >> "$GITHUB_OUTPUT" # 1.45
-          echo "major=$major"      >> "$GITHUB_OUTPUT"   # 1
+          {
+            echo "full=$v"           # 1.45.1
+            echo "minor=$major.$minor" # 1.45
+            echo "major=$major"      # 1
+          } >> "$GITHUB_OUTPUT"
 
       - name: Login to GHCR
         uses: docker/login-action@v4
@@ -135,8 +155,8 @@ jobs:
       - name: Build (scan image)
         uses: docker/build-push-action@v7
         with:
-          context: ${{ matrix.image.context }}
-          file: ${{ matrix.image.dockerfile }}
+          context: ${{ steps.build-paths.outputs.context }}
+          file: ${{ steps.build-paths.outputs.dockerfile }}
           pull: true               # aktualisiert Base-Image
           push: false
           load: true
@@ -177,8 +197,8 @@ jobs:
         if: ${{ success() }}
         uses: docker/build-push-action@v7
         with:
-          context: ${{ matrix.image.context }}
-          file: ${{ matrix.image.dockerfile }}
+          context: ${{ steps.build-paths.outputs.context }}
+          file: ${{ steps.build-paths.outputs.dockerfile }}
           platforms: linux/amd64,linux/arm64
           pull: true
           push: true
@@ -196,14 +216,14 @@ jobs:
       matrix:
         image:
           - name: "dbcleanup"
-            dockerfile: "Dockerfile-dbcleanup"
-            context: "."
+            dockerfile: "resources/dbcleanup/Dockerfile"
+            context: "./resources/dbcleanup"
           - name: "loganalyzer"
-            dockerfile: "Dockerfile-loganalyzer"
-            context: "."
+            dockerfile: "resources/loganalyzer/Dockerfile"
+            context: "./resources/loganalyzer"
           - name: "syslogng"
-            dockerfile: "Dockerfile-syslogng"
-            context: "."
+            dockerfile: "resources/syslogng/Dockerfile"
+            context: "./resources/syslogng"
 
     steps:
       - uses: actions/checkout@v7

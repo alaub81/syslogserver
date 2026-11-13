@@ -1,4 +1,3 @@
-# Dockerfile-syslogng (Ausschnitt)
 FROM debian:trixie-slim
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -25,7 +24,7 @@ RUN curl -fsSLo /usr/local/bin/supercronic \
   && chmod +x /usr/local/bin/supercronic
 
 # EntryPoint: schreibt Logrotate-Config aus ENV + startet Supercronic & syslog-ng
-COPY resources/syslogng-entrypoint.sh /usr/local/bin/syslogng-entrypoint.sh
+COPY syslogng-entrypoint.sh /usr/local/bin/syslogng-entrypoint.sh
 RUN chmod +x /usr/local/bin/syslogng-entrypoint.sh
 
 # WICHTIG: syslog-ng bleibt der "Hauptprozess", supercronic läuft im Hintergrund

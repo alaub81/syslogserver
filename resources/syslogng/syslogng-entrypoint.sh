@@ -2,10 +2,10 @@
 set -eu
 
 # --- ENV Defaults (per .env/compose überschreibbar) ---
-: "${LOGROTATE_CRON:=0 0 * * *}"          # täglich 00:00
-: "${LOGROTATE_SIZE:=50M}"                # ab Größe rotieren
+: "${LOGROTATE_CRON:=0 * * * *}"          # stündlich
+: "${LOGROTATE_SIZE:=2M}"                 # kleine Dateien im 32-MiB-Log-tmpfs
 : "${LOGROTATE_MAX_AGE_DAYS:=30}"         # rotierte Files > X Tage löschen
-: "${LOGROTATE_ROTATIONS:=7}"             # Anzahl der Backups
+: "${LOGROTATE_ROTATIONS:=2}"             # Anzahl der Backups
 
 # --- Logrotate-Regel (reopen statt copytruncate) ---
 # Tipp: olddir trennt aktive von rotierten Files
@@ -37,7 +37,7 @@ printf '%s %s\n' "${LOGROTATE_CRON}" "/usr/sbin/logrotate -s /var/lib/logrotate/
 echo "[entrypoint] logrotate schedule: ${LOGROTATE_CRON}"
 echo "[entrypoint] size=${LOGROTATE_SIZE}, maxage=${LOGROTATE_MAX_AGE_DAYS}, rotations=${LOGROTATE_ROTATIONS}"
 
-# --- Supercronic im Hintergrund starten (schreibt hübsche JSON-Logs) --- 
+# --- Supercronic im Hintergrund starten (schreibt hübsche JSON-Logs) ---
 # Wichtig: Supercronic darf nicht PID 1 sein, damit SIGTERM an syslog-ng geht.
 nohup /usr/local/bin/supercronic -json /etc/cron.d/syslogrotate >/proc/1/fd/1 2>/proc/1/fd/2 &
 

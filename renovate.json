@@ -2,35 +2,50 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    ":dependencyDashboard",
-    ":enableVulnerabilityAlerts",
     "docker:enableMajor"
   ],
   "timezone": "Europe/Berlin",
-  "schedule": ["before 06:00 on monday"],
+  "schedule": ["* 0-5 * * 1"],
   "labels": ["dependencies"],
+  "automerge": false,
+  "vulnerabilityAlerts": { "enabled": false },
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/.lint-venv/**",
+    "**/.lint-tools/**",
+    ".local/**"
+  ],
   "packageRules": [
     {
-      "matchManagers": ["dockerfile", "github-actions"],
-      "automerge": true,
-      "automergeType": "pr",
-      "major": { "automerge": false },
-      "minor": { "automerge": true },
-      "patch": { "automerge": true }
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "matchManagers": ["pip_requirements"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Python lint tools"
     },
     {
       "matchDatasources": ["docker"],
-      "groupName": "base-images"
+      "groupName": null
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "groupName": null
     }
   ],
-  "regexManagers": [
+  "customManagers": [
     {
-      "fileMatch": ["^\\.env$", "^\\.env\\.example$"],
+      "customType": "regex",
+      "managerFilePatterns": ["/^resources/loganalyzer/Dockerfile$/"],
       "matchStrings": [
         "LOGANALYZER_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
       "datasourceTemplate": "github-tags",
-      "depNameTemplate": "adiscon/loganalyzer",
+      "depNameTemplate": "rsyslog/loganalyzer",
       "versioningTemplate": "semver"
     }
   ]

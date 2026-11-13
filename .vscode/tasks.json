@@ -1,31 +1,18 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "lint:shell",
-            "type": "shell",
-            "command": "shellcheck $(git ls-files '**/*.sh')",
-            "problemMatcher": []
-        },
-        {
-            "label": "lint:yaml",
-            "type": "shell",
-            "command": "yamllint .",
-            "problemMatcher": []
-        },
-        {
-            "label": "lint:docker",
-            "type": "shell",
-            "command": "docker run --rm -v ${workspaceFolder}:/work -w /work hadolint/hadolint hadolint Dockerfile*",
-            "problemMatcher": []
-        },
-        {
-            "label": "lint:all",
-            "dependsOn": [
-                "lint:shell",
-                "lint:yaml",
-                "lint:docker"
-            ]
-        }
-    ]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "lint:all",
+      "type": "process",
+      "command": "${workspaceFolder}/tests/linter-check.sh",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
 }

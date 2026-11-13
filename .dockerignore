@@ -1,7 +1,12 @@
 .git
 **/*.log
-data/syslog-ng/log/*
+data/
+/.local/
+/.lint-venv/
+/.lint-tools/
+/.ruff_cache/
+__pycache__/
 secrets/*
 .env
 .env.example
-.DS_Store
+**/.DS_Store

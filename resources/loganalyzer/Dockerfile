@@ -22,7 +22,7 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY resources/php-overrides.ini /usr/local/etc/php/conf.d/zz-loganalyzer.ini
+COPY php-overrides.ini /usr/local/etc/php/conf.d/zz-loganalyzer.ini
 
 # ---- LogAnalyzer Build-Parameter ----
 

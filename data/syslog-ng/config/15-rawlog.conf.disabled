@@ -1,0 +1,10 @@
+# Optional raw UDP diagnostics; loaded before vendor routing.
+destination d_rawudp {
+  file("/var/log/raw-udp.log");
+};
+
+# This tap does not claim messages, so standard and vendor routes still run.
+log {
+  source(s_udp);
+  destination(d_rawudp);
+};

@@ -17,8 +17,8 @@ RUN curl -fsSLo /usr/local/bin/supercronic \
   && chmod +x /usr/local/bin/supercronic
 
 WORKDIR /app
-COPY resources/dbcleanup.sh /app/dbcleanup.sh
-COPY resources/dbcleanup-entrypoint.sh /app/dbcleanup-entrypoint.sh
+COPY dbcleanup.sh /app/dbcleanup.sh
+COPY dbcleanup-entrypoint.sh /app/dbcleanup-entrypoint.sh
 RUN chmod +x /app/dbcleanup.sh /app/dbcleanup-entrypoint.sh
 
 ENTRYPOINT ["/app/dbcleanup-entrypoint.sh"]
