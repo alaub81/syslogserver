@@ -7,6 +7,7 @@ __pycache__/
 .DS_Store
 data/syslog-ng/log/*
 data/syslog-ng/config/15-rawlog.conf
+data/syslog-ng/config/11-dns.conf
 data/syslog-ng/config/shelly-debug/*.conf
 data/syslog-ng/config/20-shelly.conf
 data/syslog-ng/logs/

@@ -63,6 +63,9 @@ The development file is standalone and can also be started directly from
 VS Code using the `compose:dev:up` build task. No extra parameters are needed.
 Use the same Compose file and project name for subsequent commands.
 
+Optional sender DNS resolution follows the same copy-to-enable pattern; see
+[reverse DNS](docs/operations.md#optional-reverse-dns).
+
 ### File storage
 
 The standard keeps files in `./data/syslog-ng/logs/`, checks rotation hourly at

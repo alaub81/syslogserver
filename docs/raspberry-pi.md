@@ -4,7 +4,9 @@ The ingestion path uses SQL transactions of up to **100 records**, with a
 **1,000 ms** timeout for incomplete batches. This reduces commit/sync overhead;
 it still executes one INSERT per record. Reverse DNS is disabled in syslog-ng
 and LogAnalyzer. Shelly device IDs and hostnames supplied in standard syslog
-messages remain available. For sender mode, the base listener now uses IPs.
+messages remain available. For sender mode, the base listener uses IPs by default. The optional
+[DNS snippet](operations.md#optional-reverse-dns) enables cached reverse DNS
+without editing the base listener.
 Records waiting in syslog-ng's RAM queues or an uncommitted batch can be lost
 if the collector crashes. Graceful stop/reload flushes pending batches when
 the destination is available; UDP itself provides no delivery guarantee.

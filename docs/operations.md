@@ -34,6 +34,7 @@ Snippets under `data/syslog-ng/config/` are loaded in filename order:
 | File | Purpose |
 | --- | --- |
 | `10-syslogsrv.conf` | Shared listeners, standard parsers and SQL/file destinations. |
+| `11-dns.conf.disabled` | Optional cached reverse DNS and fully qualified sender names. |
 | `15-rawlog.conf.disabled` | Optional raw UDP file logging before vendor routing. |
 | `20-shelly.conf.disabled` | Optional Shelly detection, framing, parsing and routing. |
 | `shelly-debug/30-debug.conf.disabled` | Optional Shelly diagnostics, included only by the enabled Shelly module. |
@@ -63,7 +64,7 @@ The active module contains the Host-column policy:
 
 - `sender` is the template default: preserve the sender hostname/IP from the
   shared listener. Reverse DNS is disabled by default, so normally an IP is
-  displayed. Enable DNS in the base listener if resolved names are required.
+  displayed. Enable the optional DNS module if resolved names are required.
 - `device` uses the Shelly hardware ID. This is useful when Docker Desktop or
   another intermediary translates all devices to the same source address.
 
@@ -74,6 +75,46 @@ reads its Host column from `FromHost`. Shelly levels 0–4 map to syslog severit
 Shelly UDP uptime is not treated as a Unix timestamp; reception time is used.
 Known script channels 101/102 receive the `shelly-script` tag; other unfamiliar
 formats remain visible under `shelly-other`.
+
+### Optional reverse DNS
+
+Reverse DNS is disabled by default to keep sender IPs and avoid DNS lookup
+work during ingestion. Enable it like the optional Shelly module:
+
+```bash
+cp data/syslog-ng/config/11-dns.conf.disabled data/syslog-ng/config/11-dns.conf
+docker compose exec -T syslogng syslog-ng --syntax-only --no-caps
+docker compose exec -T syslogng syslog-ng-ctl reload
+```
+
+The snippet loads after `10-syslogsrv.conf` and overrides `use_dns(no)` and
+`use_fqdn(no)` with `yes`, enabling the DNS cache as well. No image rebuild is
+needed for a running collector. Before the first start, just copy the file and
+use the normal Compose startup command. For a development stack, add
+`-f docker-compose.dev.yml` to each Docker Compose command.
+
+The resolver inside the container must be able to resolve the sender IP to a
+name (for example, a PTR record in your local DNS). Test with a real device IP:
+
+```bash
+docker compose exec syslogng getent hosts 192.168.1.42
+```
+
+With Shelly parsing enabled, use `@define shelly-host-mode "sender"` in your
+local `20-shelly.conf` to show these names. The `device` mode keeps hardware IDs.
+A NAT/relay address can only resolve to that intermediary, not the hidden device.
+Existing hostnames supplied in ordinary syslog messages remain authoritative
+because `keep_hostname(yes)` stays enabled.
+
+This changes the `HOST`/`FromHost` stored for **new** records in both MariaDB
+and `events.log`; it is not a LogAnalyzer-only display switch. Message bodies
+are unaffected, and existing rows/files are not rewritten. If no name can be
+resolved, the sender IP remains. DNS lookup latency can delay ingestion when
+your resolver is unavailable; the cache reduces repeated lookups.
+
+To disable it, remove only the active local `11-dns.conf` copy, validate syntax
+and reload again. Keep the shipped `.disabled` template. Active DNS copies are
+excluded from Git, and defaults remain IP-only when the module is absent.
 
 ### Normal file history
 

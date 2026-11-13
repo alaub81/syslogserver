@@ -70,6 +70,8 @@ cat > "$TEST_DIR/override.yml" <<YAML
 services:
   syslogng:
     image: ${SYSLOG_IMAGE}
+    extra_hosts:
+      - "dns-e2e.example.test:127.0.0.42"
     volumes:
       - ${TEST_DIR}/syslog-config:/etc/syslog-ng/conf.d/:ro
       - ${TEST_DIR}/logs:/var/log

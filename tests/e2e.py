@@ -158,6 +158,28 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
             if len(hosts) != 1 or not next(iter(hosts)) or device in hosts:
                 raise AssertionError(f"Sender mode must retain the transport sender: {hosts}")
 
+    def dns_module(self):
+        def send(label, host):
+            message = f"{self.prefix}-{label}"
+            payload = f"shellyplus1-aabbccddeeff 30 130.5 2 2|ci-dns.cpp:1 {message}"
+            self.run("exec", "-T", "-e", f"TEST_PAYLOAD={payload}", "syslogng", "sh", "-ec",
+                     'printf "%s" "$TEST_PAYLOAD" | nc -u -s 127.0.0.42 -w 1 127.0.0.1 514')
+            self.expect(message, host=host, tag="ci-dns.cpp", source="ci-dns.cpp:1", priority=6, pid=0)
+
+        send("dns-default-off", "127.0.0.42")
+        self.verify("DNS is disabled by default")
+        module = self.config / "11-dns.conf"
+        shutil.copyfile(ROOT / "data/syslog-ng/config/11-dns.conf.disabled", module)
+        self.reload("sender")
+        send("dns-enabled", "dns-e2e.example.test")
+        self.standard("dns")
+        self.verify("Copied DNS module resolves sender FQDNs and preserves supplied syslog hostnames")
+        module.unlink()
+        self.reload("sender")
+        send("dns-disabled-again", "127.0.0.42")
+        self.verify("Removing the DNS module restores sender IPs without changing existing rows")
+        self.check_file_history()
+
     def check_ui(self):
         # Query through the host-published HTTP port, without relying on a health probe.
         with urllib.request.urlopen(f"http://127.0.0.1:{self.http_port}/index.php", timeout=30) as response:
@@ -298,6 +320,7 @@ def main():
     stack.verify("Default configuration with Shelly disabled and published UDP/TCP ports")
     stack.reload("sender")
     stack.shelly("sender")
+    stack.dns_module()
     stack.reload("device", diagnostics=True)
     stack.shelly("device")
     stack.check_ui()

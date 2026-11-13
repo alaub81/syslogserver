@@ -1,0 +1,12 @@
+# Optional reverse DNS; disabled by default.
+# Enable by copying this template to 11-dns.conf (the active file is local).
+# Loaded after 10-syslogsrv.conf so these settings override its IP-only defaults.
+# The container's resolver must know PTR records or local host mappings.
+# Resolved HOST values are stored in both MariaDB and events.log for new records.
+# For Shelly sender names, keep shelly-host-mode "sender" in 20-shelly.conf.
+# The "device" mode intentionally uses Shelly hardware IDs instead of DNS names.
+options {
+  use_dns(yes);
+  use_fqdn(yes);
+  dns_cache(yes);
+};

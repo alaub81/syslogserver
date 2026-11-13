@@ -77,16 +77,19 @@ The test sends through the published host ports and verifies:
 2. Shelly enabled in both `sender` and `device` host modes: NUL-delimited records,
    empty delimiters, trailing NUL, all five levels, script channels 101/102,
    unknown channels, older headers and incomplete fragments.
-3. Exact SQL messages and metadata, PIDs, priorities, reception time, Unicode,
+3. Copying/removing the optional DNS template: IP-only defaults, resolved
+   sender FQDNs in SQL/file history and unchanged supplied syslog hostnames.
+   A local host mapping keeps this test independent of external DNS servers.
+4. Exact SQL messages and metadata, PIDs, priorities, reception time, Unicode,
    embedded newlines and trailing spaces, without duplicate rows.
-4. Standard syslog still working alongside Shelly, normalized/raw diagnostics
+5. Standard syslog still working alongside Shelly, normalized/raw diagnostics
    and both message types displayed through published HTTP in LogAnalyzer.
-5. Canonical JSON file history matching the SQL messages/metadata, real file
+6. Canonical JSON file history matching the SQL messages/metadata, real file
    rotation and continued writes after reopen. Persistent files survive a restart.
-6. Switching the same stack to a real 128 MiB tmpfs, with 2 MiB/two-archive
+7. Switching the same stack to a real 128 MiB tmpfs, with 2 MiB/two-archive
    rotation checked every five minutes. RAM files reset on restart while SQL
    history and previous host archives remain intact.
-7. Multiple real cleanup batches removing five expired rows while preserving
+8. Multiple real cleanup batches removing five expired rows while preserving
    every fresh test row.
 
 Failures print the test stack's logs. Exit and signal handlers remove only its
