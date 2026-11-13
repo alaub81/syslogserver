@@ -20,7 +20,7 @@ RUN apt-get update \
 # Supercronic (arch-agnostisch)
 ARG TARGETARCH
 RUN curl -fsSLo /usr/local/bin/supercronic \
-  "https://github.com/aptible/supercronic/releases/download/v0.2.43/supercronic-linux-${TARGETARCH}" \
+  "https://github.com/aptible/supercronic/releases/download/v0.2.51/supercronic-linux-${TARGETARCH}" \
   && chmod +x /usr/local/bin/supercronic
 
 # EntryPoint: schreibt Logrotate-Config aus ENV + startet Supercronic & syslog-ng
