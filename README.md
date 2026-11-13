@@ -98,6 +98,11 @@ docker compose exec syslogng tail -F /var/log/shelly.log
 
 Without this extra output, Shelly messages already appear in MariaDB and the
 shared `events.log` when Shelly support is enabled.
+If an older active `20-shelly.conf` writes only to MariaDB, add
+`destination(d_events_file);` immediately after `destination(d_mysql);` in its
+normalized Shelly route, then validate and reload. `git pull` updates the
+template but leaves your active copy unchanged; preserve its other settings.
+See [upgrading file history](docs/operations.md#normal-file-history).
 
 ### Raw UDP diagnostics
 
