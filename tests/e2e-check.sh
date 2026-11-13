@@ -55,7 +55,9 @@ LOGROTATE_ROTATIONS=7
 ENV
 
 # Start with only the shipped standard route, regardless of local enabled files.
-mkdir "$TEST_DIR/syslog-config" "$TEST_DIR/logs"
+# Keep bind-mounted directories owned by the runner so Linux cleanup can remove
+# root-owned log files without elevated host permissions.
+mkdir -p "$TEST_DIR/syslog-config" "$TEST_DIR/logs/rotated"
 cp data/syslog-ng/config/10-syslogsrv.conf data/syslog-ng/config/90-default.conf "$TEST_DIR/syslog-config/"
 if "$SKIP_BUILD"; then
   SYSLOG_IMAGE=syslogng-mysql:latest
