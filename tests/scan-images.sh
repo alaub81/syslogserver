@@ -20,12 +20,13 @@ for specification in "$@"; do
   if [[ "$image" == archive:* ]]; then
     target=(--input "${image#archive:}")
   fi
-  if ! trivy image --scanners vuln --ignore-unfixed --severity MEDIUM,HIGH,CRITICAL \
+  if ! trivy image --scanners vuln --ignorefile /dev/null --ignore-unfixed=false \
+    --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 0 \
     --timeout 10m --format json --output "$REPORT_DIR/$name.json" "${target[@]}"; then
     status=1
     continue
   fi
-  if ! trivy convert --ignorefile .trivyignore.yaml --format sarif --severity MEDIUM,HIGH,CRITICAL \
+  if ! trivy convert --ignorefile /dev/null --format sarif --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
     --output "$REPORT_DIR/$name.sarif" "$REPORT_DIR/$name.json"; then
     status=1
   else
@@ -34,8 +35,12 @@ for specification in "$@"; do
       '.runs[].automationDetails.id = $category' "$REPORT_DIR/$name.sarif" > "$REPORT_DIR/$name.sarif.tmp"
     mv -- "$REPORT_DIR/$name.sarif.tmp" "$REPORT_DIR/$name.sarif"
   fi
+  # Conversion has no --ignore-unfixed flag: filter only the gate input.
+  jq '.Results |= map(if .Vulnerabilities then .Vulnerabilities |= map(
+    select(.Status == "fixed" or (.Status == null and (.FixedVersion // "") != ""))) else . end)' \
+    "$REPORT_DIR/$name.json" > "$REPORT_DIR/$name.gate.json"
   if ! trivy convert --ignorefile .trivyignore.yaml --scanners vuln --format table \
-    --severity HIGH,CRITICAL --exit-code 1 "$REPORT_DIR/$name.json"; then
+    --severity HIGH,CRITICAL --exit-code 1 "$REPORT_DIR/$name.gate.json"; then
     status=1
   fi
 done

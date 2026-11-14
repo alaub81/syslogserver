@@ -51,7 +51,7 @@ These tests require no running stack or network:
 - Cleanup: bounded batches, fixed cutoff, empty results, SQL failures and invalid settings.
 - Native installer: version consistency, release URLs, extraction, checksums and executable versions.
 - Release tags: numeric SemVer ordering, invalid tags/counts and safe major/minor/latest aliases.
-- Scan policy: six boundary checks using the real Trivy converter, run in the
+- Scan policy: six exception boundary checks plus a full report/gate pipeline test using the real Trivy converter, run in the
   stack job after Trivy installation (skipped when Trivy is unavailable locally).
 
 ## End-to-end stack test
@@ -117,7 +117,9 @@ CI. New commits cancel superseded CI runs.
 Each application image is built once per tested architecture. Per-image caches
 avoid collisions. Only the `os-packages` stage is forcibly refreshed for package
 fixes. Trivy scans each of these images and the actual MariaDB image once,
-then converts JSON into SARIF and a HIGH/CRITICAL gate. Raw JSON and SARIF are
+then converts full JSON into SARIF and derives a fixable HIGH/CRITICAL gate.
+Reports include all severities and unfixed findings; approved exceptions apply
+only to the gate. Raw JSON and SARIF are
 retained for seven days even when the gate fails. Code-scanning uploads run
 only on main, with separate image/architecture categories. The CVE database is
 cached daily; native lint tools and pip downloads are cached independently.

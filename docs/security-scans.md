@@ -3,7 +3,8 @@
 ## Current gate
 
 CI and releases reject fixable HIGH/CRITICAL vulnerabilities. Raw Trivy JSON
-and SARIF reports are retained for seven days. The approved exceptions below
+and SARIF reports include all severities and unfixed findings and are retained
+for seven days. SARIF uploads run even when the gate fails. The approved exceptions below
 are active only for the reviewed gosu/Go version.
 
 The GitHub [database scan](https://github.com/alaub81/syslogserver/actions/runs/43392398979/job/131775373930)
@@ -51,7 +52,7 @@ CVEs, with all these restrictions:
 - Expiration: `2027-02-01`, followed by renewed review.
 - Reason: the affected symbols are absent from the verified gosu 1.19 binaries.
 - Keep the full raw JSON report; apply exceptions only when converting the
-  report for the gate/SARIF.
+  report for the gate. Full SARIF reports keep these findings visible.
 
 New CVEs, other Go versions, other packages and other binary paths still
 fail the HIGH/CRITICAL gate. MEDIUM findings continue to be reported.
@@ -85,10 +86,12 @@ fail the HIGH/CRITICAL gate. MEDIUM findings continue to be reported.
 | `CVE-2026-78669` | HIGH | net/http |
 | `CVE-2026-97031` | HIGH | crypto/tls |
 
-Six automated tests run Trivy conversion against synthetic findings. They prove
+Seven automated tests run Trivy conversion against synthetic findings. They prove
 that all reviewed CVEs are excluded only in scope, while another binary path,
 another Go version, another package, a new CVE and an expired exception all
-fail the gate. These tests require no database download.
+fail the gate. The full scan pipeline also verifies fixed HIGH/CRITICAL failures,
+unfixed and LOW findings, and approved exceptions while keeping every finding
+in SARIF. These tests require no database download.
 
 ## Reproducing the binary analysis
 

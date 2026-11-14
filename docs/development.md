@@ -33,7 +33,8 @@ download URLs in the syslogng and dbcleanup Dockerfiles are updated together.
 New update branches are scheduled for Mondays before 06:00 Europe/Berlin.
 Non-major updates are grouped separately for Actions and Python lint
 dependencies; Docker images and major upgrades are reviewed per dependency.
-Automerge is disabled. The Dependency Dashboard tracks pending updates.
+Supercronic minor/patch updates merge automatically after CI passes; all other
+updates remain manually reviewed. The Dependency Dashboard tracks pending updates.
 
 The three application Dockerfiles refresh package lists and upgrade installed
 Debian packages before installing their dependencies. Their official base images
@@ -94,7 +95,9 @@ own Dockerfiles, including legacy root-level Dockerfiles when necessary.
 Each application image is built and scanned for amd64 and arm64, then publishing
 reuses those layers on the same builder. The gate consistently rejects fixable
 HIGH/CRITICAL findings. Reports are converted from each scan's JSON rather than
-rescanning. QEMU is confined to release arm64 builds. Publishing is serialized.
+rescanning. Full reports include every severity and unfixed findings; only the
+gate applies the reviewed CVE exceptions. SARIF is uploaded even after a failed
+gate, and raw reports remain available as workflow artifacts. QEMU is confined to release arm64 builds. Publishing is serialized.
 
 Full version aliases are always updated for the selected tag. Major, minor and
 `latest` aliases are updated only by the newest stable version in the relevant

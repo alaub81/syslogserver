@@ -2,10 +2,12 @@
 
 import copy
 import json
+import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -80,6 +82,50 @@ class ScanPolicyTests(unittest.TestCase):
         expired = self.directory / "expired.yaml"
         expired.write_text(re.sub(r"expired_at: [0-9-]+", "expired_at: 2000-01-01", self.policy.read_text()))
         self.assertEqual(self.gate(policy=expired), 1)
+
+
+    def test_full_reports_and_fixable_gate(self):
+        """Keep all findings visible while filtering only gate input and exceptions."""
+        real_trivy = shutil.which("trivy")
+        commands = self.directory / "bin"
+        commands.mkdir()
+        wrapper = commands / "trivy"
+        wrapper.write_text(
+            f"#!{sys.executable}\n"
+            "import os, pathlib, sys\n"
+            "if sys.argv[1] == 'image':\n"
+            "    output = sys.argv[sys.argv.index('--output') + 1]\n"
+            "    pathlib.Path(output).write_bytes(pathlib.Path(os.environ['SCAN_FIXTURE']).read_bytes())\n"
+            "else:\n"
+            f"    os.execv({real_trivy!r}, [{real_trivy!r}, *sys.argv[1:]])\n"
+        )
+        wrapper.chmod(0o755)
+        cases = [
+            ("HIGH", "fixed", "1.24.13", "CVE-2099-99999", 1),
+            ("CRITICAL", "fixed", "1.24.13", "CVE-2099-99999", 1),
+            ("CRITICAL", "affected", "", "CVE-2099-99999", 0),
+            ("LOW", "fixed", "1.24.13", "CVE-2099-99999", 0),
+            ("CRITICAL", "fixed", "1.24.13", "CVE-2025-68121", 0),
+        ]
+        for index, (severity, status, fixed, cve, expected) in enumerate(cases):
+            with self.subTest(severity=severity, status=status, cve=cve):
+                fixture = copy.deepcopy(self.fixture)
+                vulnerability = fixture["Results"][0]["Vulnerabilities"][0]
+                vulnerability.update(Severity=severity, Status=status, FixedVersion=fixed, VulnerabilityID=cve)
+                source = self.directory / "scan.json"
+                source.write_text(json.dumps(fixture))
+                reports = self.directory / f"reports-{index}"
+                env = dict(os.environ, PATH=f"{commands}{os.pathsep}{os.environ['PATH']}", SCAN_FIXTURE=str(source))
+                result = subprocess.run(
+                    ["bash", "tests/scan-images.sh", str(reports), "fixture=unused:test"],
+                    cwd=ROOT, env=env, capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+                raw = json.loads((reports / "fixture.json").read_text())
+                self.assertEqual(len(raw["Results"][0]["Vulnerabilities"]), 1)
+                sarif = json.loads((reports / "fixture.sarif").read_text())
+                self.assertEqual(len(sarif["runs"][0]["results"]), 1)
+
 
 
 if __name__ == "__main__":

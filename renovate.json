@@ -2,7 +2,8 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    "docker:enableMajor"
+    "docker:enableMajor",
+    ":dependencyDashboard"
   ],
   "timezone": "Europe/Berlin",
   "schedule": [
@@ -55,6 +56,21 @@
         "major"
       ],
       "groupName": null
+    },
+    {
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchPackageNames": [
+        "aptible/supercronic"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false
     }
   ],
   "customManagers": [
