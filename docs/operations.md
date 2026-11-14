@@ -58,7 +58,9 @@ The module repairs the observed Shelly `raw-event` power-measurement split only
 when all of these conditions hold:
 
 - Two records are directly adjacent in the same UDP datagram, without empty
-  separators; device ID, uptime, channel 102 and severity match exactly.
+  separators; device ID, channel 102 and severity match exactly. Uptime is equal
+  or advances by at most one millisecond (the observed clock-tick boundary).
+  Backwards time and larger gaps are rejected; comparisons use exact integers.
 - Sequence numbers are consecutive, the first body is exactly 128 bytes, and
   the second body is at most 128 bytes.
 - The boundary splits the JSON key `"event"`, and the continuation supplies

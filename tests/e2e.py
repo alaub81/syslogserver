@@ -236,7 +236,9 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
     def shelly_fragments(self):
         # Whitespace after the JSON object identifies each case without changing
         # the observed 128-byte boundary. SQL and file history must match exactly.
-        for index, case in enumerate(("join", "device", "gap", "uptime", "separate", "tcp")):
+        for index, case in enumerate(
+            ("join", "tick", "device", "gap", "uptime", "separate", "tcp")
+        ):
             body = BODY + b" " * index
             device = f"shelly-{self.prefix}-{case}"
             first = record(body[:128], device=device)
@@ -244,7 +246,7 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
                 body[128:],
                 seq=12 if case == "gap" else 11,
                 device=device + "-other" if case == "device" else device,
-                uptime="123.457" if case == "uptime" else "123.456",
+                uptime={"tick": "123.457", "uptime": "123.458"}.get(case, "123.456"),
             )
             if case == "separate":
                 self.udp(first.decode())
@@ -261,7 +263,7 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
                     f"SELECT HEX(Message) FROM SystemEvents WHERE FromHost LIKE '{device}%' ORDER BY ID;"
                 )
                 actual = [bytes.fromhex(line) for line in output.splitlines() if line]
-                expected = [body] if case == "join" else [body[:128], body[128:]]
+                expected = [body] if case in ("join", "tick") else [body[:128], body[128:]]
                 if len(actual) >= len(expected) or time.monotonic() >= deadline:
                     break
                 time.sleep(0.5)

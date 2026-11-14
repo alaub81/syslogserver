@@ -32,6 +32,25 @@ def number(value):
     return type(value) in (int, float) and math.isfinite(value)
 
 
+def adjacent_uptime(first, second):
+    """A fragment pair may straddle one forward millisecond clock tick.
+
+    Use integer milliseconds, not rounded floats. Unknown precision, backwards
+    clocks and larger gaps remain separate. This is not a buffering timeout.
+    """
+    if first == second:
+        return True
+
+    def milliseconds(value):
+        whole, _, fraction = value.partition(b".")
+        if len(whole) > 20 or len(fraction) > 3:
+            return None
+        return int(whole) * 1000 + int(fraction.ljust(3, b"0"))
+
+    start, end = milliseconds(first), milliseconds(second)
+    return start is not None and end is not None and 0 <= end - start <= 1
+
+
 def measurement(body):
     """Require the known event schema, including consistent nested identity."""
     try:
@@ -75,10 +94,8 @@ def reassemble(payload):
                 len(body) == 128
                 and body.startswith(PREFIX + b'{"component":')
                 and key
-                and all(
-                    first[field] == second[field]
-                    for field in ("device", "uptime", "channel", "level")
-                )
+                and all(first[field] == second[field] for field in ("device", "channel", "level"))
+                and adjacent_uptime(first["uptime"], second["uptime"])
                 and int(second["seq"]) == int(first["seq"]) + 1
                 and 0 < len(second["body"]) <= 128
                 and second["body"].startswith(b"event"[len(key[1]) :] + b'":"power_measurement",')

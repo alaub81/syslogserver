@@ -31,7 +31,7 @@ class FragmentTests(unittest.TestCase):
     def test_header_boundaries(self):
         for change in (
             {"device": "shelly-other"},
-            {"uptime": "123.457"},
+            {"uptime": "123.458"},
             {"channel": 101},
             {"level": 1},
         ):
@@ -48,6 +48,33 @@ class FragmentTests(unittest.TestCase):
             replacement = stamp[:delta] if delta < 0 else stamp + b"0" * delta
             body = BODY.replace(stamp, replacement)
             self.assertEqual(fragments.reassemble(pair(body)), record(body))
+
+    def test_one_forward_millisecond_is_repaired(self):
+        for start, end in (
+            ("123.456", "123.457"),
+            ("123.999", "124.000"),
+            ("825983.239", "825983.240"),
+            ("190176.509", "190176.510"),
+        ):
+            with self.subTest(start=start, end=end):
+                first = record(BODY[:128], uptime=start)
+                second = record(BODY[128:], seq=11, uptime=end)
+                self.assertEqual(
+                    fragments.reassemble(first + b"\0" + second), record(BODY, uptime=start)
+                )
+
+    def test_backwards_larger_or_unknown_time_gaps_are_not_joined(self):
+        for uptime in ("123.455", "123.458", "124.456", "0.000", "123.4571"):
+            payload = pair(uptime=uptime)
+            self.assertEqual(fragments.reassemble(payload), payload)
+
+    def test_clock_tolerance_does_not_join_independent_text_or_other_devices(self):
+        for payload in (
+            pair(device="shelly-other", uptime="123.457"),
+            record(b"x" * 128) + b"\0" + record(b"independent", seq=11, uptime="123.457"),
+            record(BODY[:128]) + b"\0" + record(BODY[128:], seq=12, uptime="123.457"),
+        ):
+            self.assertEqual(fragments.reassemble(payload), payload)
 
     def test_never_buffers_across_datagrams_or_skips_delimiters(self):
         first, second = pair().split(b"\0")
