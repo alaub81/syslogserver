@@ -14,7 +14,7 @@ fi
 TEST_DIR=$(mktemp -d)
 TEST_PROJECT="syslogserver-e2e-$(date +%s)-$$"
 COMPOSE=(docker compose --project-name "$TEST_PROJECT" --env-file "$TEST_DIR/stack.env"
-  -f "$PROJECT_DIR/docker-compose.dev.yml" -f "$TEST_DIR/override.yml")
+  -f "$PROJECT_DIR/compose.dev.yml" -f "$TEST_DIR/override.yml")
 
 cleanup() {
   local status=$?
@@ -68,20 +68,16 @@ else
   LOGANALYZER_IMAGE=${TEST_PROJECT}-loganalyzer:test
   CLEANUP_IMAGE=${TEST_PROJECT}-dbcleanup:test
 fi
-cat > "$TEST_DIR/override.yml" <<YAML
-services:
-  syslogng:
-    image: ${SYSLOG_IMAGE}
-    extra_hosts:
-      - "dns-e2e.example.test:127.0.0.42"
-    volumes:
-      - ${TEST_DIR}/syslog-config:/etc/syslog-ng/conf.d/:ro
-      - ${TEST_DIR}/logs:/var/log
-  loganalyzer:
-    image: ${LOGANALYZER_IMAGE}
-  dbcleanup:
-    image: ${CLEANUP_IMAGE}
-YAML
+export SYSLOG_IMAGE LOGANALYZER_IMAGE CLEANUP_IMAGE
+TEST_DIRECTORY="$TEST_DIR" python3 - <<'PYTHON'
+import os
+from pathlib import Path
+from string import Template
+
+Path(os.environ["TEST_DIRECTORY"], "override.yml").write_text(
+    Template(Path("tests/compose.test.yml").read_text()).substitute(os.environ)
+)
+PYTHON
 
 "${COMPOSE[@]}" config --quiet
 if ! "$SKIP_BUILD"; then

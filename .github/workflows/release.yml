@@ -6,183 +6,149 @@ on:
   workflow_dispatch:
     inputs:
       num_tags:
-        description: 'Number of recent stable tags to rebuild (1-20)'
+        description: 'Number of recent stable tags to refresh (1-20; exact-commit CI required)'
         required: false
         default: 1
         type: number
   schedule:
-    - cron: '0 1 * * 2'  # Tuesday at 01:00 UTC; refresh the latest release's OS packages.
+    - cron: '0 1 * * 2'  # Refresh packages even when the base image digest is unchanged.
 
 permissions:
   contents: read
 
-# Serialize publishing so scheduled rebuilds cannot race a new release's aliases.
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  select-tags:
+  plan:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      packages: read
     outputs:
-      releases: ${{ steps.tags.outputs.releases }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_images: ${{ steps.plan.outputs.has_images }}
     steps:
-      # Keep current workflow helpers available when building historical tags.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           ref: ${{ github.workflow_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - id: tags
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify exact-commit CI and plan builds or reuse
+        id: plan
         env:
           RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
           REBUILD_COUNT: ${{ inputs.num_tags || 1 }}
-        run: python3 tests/release_tags.py
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/release_plan.py
 
   release:
-    needs: select-tags
+    needs: plan
+    if: needs.plan.outputs.has_images == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: read
       packages: write
       security-events: write
-    env:
-      TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
     strategy:
       fail-fast: false
-      matrix:
-        release: ${{ fromJSON(needs.select-tags.outputs.releases) }}
-        image: [dbcleanup, loganalyzer, syslogng]
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      RELEASE_ENTRY: ${{ toJSON(matrix) }}
+      TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
     steps:
-      - name: Checkout release source
-        uses: actions/checkout@v7
+      # Use current trusted automation with the selected immutable source commit.
+      - name: Checkout workflow helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
-          ref: ${{ matrix.release.ref }}
+          ref: ${{ github.workflow_sha }}
+          path: .automation
           persist-credentials: false
-      - name: Resolve build paths and registry tags
-        id: paths
-        env:
-          IMAGE_NAME: ${{ matrix.image }}
-          ALIASES: ${{ join(matrix.release.aliases, ' ') }}
-          OWNER: ${{ github.repository_owner }}
-        run: |
-          context="./resources/$IMAGE_NAME"
-          dockerfile="resources/$IMAGE_NAME/Dockerfile"
-          if [[ ! -f "$dockerfile" && -f "Dockerfile-$IMAGE_NAME" ]]; then
-            context=.
-            dockerfile="Dockerfile-$IMAGE_NAME"
-          fi
-          test -f "$dockerfile"
-          {
-            echo "context=$context"
-            echo "dockerfile=$dockerfile"
-            echo 'tags<<TAGS'
-            for alias in $ALIASES; do
-              echo "ghcr.io/${OWNER,,}/$IMAGE_NAME:$alias"
-            done
-            echo TAGS
-          } >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-qemu-action@v4
+      - name: Checkout release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ matrix.sha }}
+          path: source
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4
         with:
           platforms: arm64
-      - uses: docker/setup-buildx-action@v4
-      - name: Build amd64 image for scanning
-        uses: docker/build-push-action@v7
-        with:
-          context: ${{ steps.paths.outputs.context }}
-          file: ${{ steps.paths.outputs.dockerfile }}
-          no-cache-filters: os-packages
-          pull: true
-          load: true
-          platforms: linux/amd64
-          tags: scan:${{ matrix.image }}
-          cache-from: type=gha,scope=release-${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=release-${{ matrix.image }}
-      - name: Scan image once
-        id: scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: scan:${{ matrix.image }}
-          scanners: vuln
-          format: json
-          output: trivy.json
-          severity: 'UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL'
-          ignore-unfixed: false
-          exit-code: '0'
-      - name: Generate full amd64 SARIF report
-        run: |
-          trivy convert --ignorefile /dev/null --format sarif --output trivy.sarif trivy.json
-      - name: Build arm64 image for scanning
-        uses: docker/build-push-action@v7
-        with:
-          context: ${{ steps.paths.outputs.context }}
-          file: ${{ steps.paths.outputs.dockerfile }}
-          no-cache-filters: os-packages
-          pull: true
-          load: true
-          platforms: linux/arm64
-          tags: scan:${{ matrix.image }}-arm64
-          cache-from: type=gha,scope=release-${{ matrix.image }}
-      - name: Scan arm64 image and generate full report
-        env:
-          IMAGE_NAME: ${{ matrix.image }}
-        run: |
-          trivy image --scanners vuln --ignorefile /dev/null --ignore-unfixed=false \
-            --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --exit-code 0 \
-            --timeout 10m --format json --output trivy-arm64.json "scan:$IMAGE_NAME-arm64"
-          trivy convert --ignorefile /dev/null --format sarif --output trivy-arm64.sarif trivy-arm64.json
-      - name: Enforce fixable HIGH/CRITICAL gate for both architectures
-        run: |
-          status=0
-          for report in trivy.json trivy-arm64.json; do
-            jq '.Results |= map(if .Vulnerabilities then .Vulnerabilities |= map(
-              select(.Status == "fixed" or (.Status == null and (.FixedVersion // "") != ""))) else . end)' \
-              "$report" > "$report.gate.json"
-            trivy convert --ignorefile .trivyignore.yaml --format table \
-              --severity HIGH,CRITICAL --exit-code 1 "$report.gate.json" || status=1
-          done
-          exit "$status"
-      - name: Upload amd64 SARIF
-        if: ${{ always() && github.event.repository.private == false && hashFiles('trivy.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy.sarif
-          category: trivy-release-${{ matrix.release.ref }}-${{ matrix.image }}-amd64
-      - name: Upload arm64 SARIF
-        if: ${{ always() && github.event.repository.private == false && hashFiles('trivy-arm64.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-arm64.sarif
-          category: trivy-release-${{ matrix.release.ref }}-${{ matrix.image }}-arm64
-      - name: Keep vulnerability reports
-        if: always() && steps.scan.outcome == 'success'
-        uses: actions/upload-artifact@v7
-        with:
-          name: trivy-${{ matrix.release.ref }}-${{ matrix.image }}
-          path: |
-            trivy*.json
-            trivy*.sarif
-          retention-days: 7
-      - name: Login to GHCR
-        uses: docker/login-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish multi-arch images
-        uses: docker/build-push-action@v7
+      - name: Resolve source paths or load the immutable previous image
+        id: paths
+        run: python3 .automation/tools/release_image.py prepare
+      - name: Build amd64 once
+        if: matrix.mode == 'build'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7
         with:
           context: ${{ steps.paths.outputs.context }}
           file: ${{ steps.paths.outputs.dockerfile }}
-          # Both architectures were freshly built and scanned on this builder.
-          # Reuse those exact layers instead of rebuilding OS packages again.
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.paths.outputs.tags }}
+          pull: true
+          load: true
+          platforms: linux/amd64
+          tags: release-${{ matrix.image }}:amd64
+          no-cache: ${{ steps.paths.outputs.full_refresh == 'true' }}
+          no-cache-filters: os-packages
+          cache-from: type=gha,scope=release-${{ matrix.image }}-amd64
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.image }}-amd64
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ matrix.release.ref }}
-          cache-from: type=gha,scope=release-${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=release-${{ matrix.image }}
+            org.opencontainers.image.revision=${{ matrix.sha }}
+            org.opencontainers.image.version=${{ matrix.ref }}
+      - name: Build arm64 once
+        if: matrix.mode == 'build'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7
+        with:
+          context: ${{ steps.paths.outputs.context }}
+          file: ${{ steps.paths.outputs.dockerfile }}
+          pull: true
+          load: true
+          platforms: linux/arm64
+          tags: release-${{ matrix.image }}:arm64
+          no-cache: ${{ steps.paths.outputs.full_refresh == 'true' }}
+          no-cache-filters: os-packages
+          cache-from: type=gha,scope=release-${{ matrix.image }}-arm64
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.image }}-arm64
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ matrix.sha }}
+            org.opencontainers.image.version=${{ matrix.ref }}
+      - uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514  # v0.2.6
+        if: always() && steps.paths.outcome == 'success'
+        with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.70.0
+      - name: Smoke-test and scan both exact image IDs
+        if: always() && steps.paths.outcome == 'success'
+        run: python3 .automation/tools/release_image.py scan
+      - name: Publish only the checked platform digests
+        run: python3 .automation/tools/release_image.py publish
+      - name: Keep full reports and publication receipt
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        with:
+          name: trivy-${{ matrix.ref }}-${{ matrix.image }}
+          path: reports/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Upload SARIF
+        if: always() && github.event.repository.private == false && hashFiles('reports/*.sarif') != ''
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4
+        with:
+          sarif_file: reports

@@ -43,7 +43,7 @@ cron syntax are checked with the real container tools during E2E.
 ## Automated regression tests
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
+./tests/test-check.sh
 ```
 
 These tests require no running stack or network:
@@ -51,8 +51,12 @@ These tests require no running stack or network:
 - Cleanup: bounded batches, fixed cutoff, empty results, SQL failures and invalid settings.
 - Native installer: version consistency, release URLs, extraction, checksums and executable versions.
 - Release tags: numeric SemVer ordering, invalid tags/counts and safe major/minor/latest aliases.
+- Planning: documentation, single-image inputs, coupled stack dependencies, unknown diffs,
+  exact-commit CI, immutable reuse, missing-image fallback and historical build paths.
+- Publication: failed scans, changed local images and registry config mismatches prevent
+  release aliases from being assigned; reused images are freshly scanned too.
 - Scan policy: six exception boundary checks plus a full report/gate pipeline test using the real Trivy converter, run in the
-  stack job after Trivy installation (skipped when Trivy is unavailable locally).
+  shared suite after pinned Trivy installation. Missing required tools fail the entry point.
 
 ## End-to-end stack test
 
@@ -107,10 +111,10 @@ pulls published application images as a substitute.
 
 ## CI and vulnerability scans
 
-All PRs and main pushes run lint, regressions and Compose validation. Runtime
-changes additionally run the full stack checks on amd64; main pushes also run
-the same builds, E2E and scans on a native arm64 runner. Native runners avoid
-QEMU overhead in CI. Documentation and lint-only changes skip image work; `CI required`
+All PRs and main pushes run lint and redacted changed-commit secret scanning.
+Non-documentation changes also run offline regressions and Compose validation.
+Runtime changes run the full stack checks on native amd64 and arm64 runners. Native runners avoid
+QEMU overhead in CI. Documentation-only changes skip image work; `CI required`
 still verifies the applicable results. A failed change-detection command fails
 CI. New commits cancel superseded CI runs.
 
@@ -129,8 +133,8 @@ For a local scan of exported images, `tests/scan-images.sh` also accepts
 without access to the Docker daemon socket.
 
 See [image scan review](../docs/security-scans.md) for the current MariaDB/gosu
-findings and their analysis. Set `CI required` as a required status check in
-GitHub's main branch protection/ruleset to enforce the results before merging.
-Automerge remains disabled.
+findings and their analysis. Branch protection and mandatory GitHub checks remain
+deferred. Renovate may merge only the explicitly allowed Supercronic minor/patch
+updates after successful CI; other updates remain manual.
 
 Private capture/replay fixtures belong under `.local/` and are not distributed.

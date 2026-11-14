@@ -74,9 +74,7 @@ def install_binary(name, specification, target_platform):
             )
         filename = asset["filenameTemplate"].format(version=version)
         checksum = asset["sha256"]
-        release_base = (
-            f"https://github.com/{specification['repository']}/releases/download/{asset['version']}/"
-        )
+        release_base = f"https://github.com/{specification['repository']}/releases/download/{asset['version']}/"
         archive_path = TOOLS / filename
         download(release_base + filename, checksum, archive_path)
         if filename.endswith(".tar.gz"):
@@ -105,7 +103,10 @@ def main():
     # Validate every tool before changing any installed binary.
     for specification in specifications.values():
         tool_version(specification)
-    for name in ("shellcheck", "hadolint", "actionlint"):
+    names = sys.argv[1:] or ["shellcheck", "hadolint", "actionlint"]
+    if any(name not in specifications for name in names):
+        raise ValueError("Unknown tool requested")
+    for name in names:
         install_binary(name, specifications[name], target_platform)
         print(f"Ready: {name} {tool_version(specifications[name])}", flush=True)
 

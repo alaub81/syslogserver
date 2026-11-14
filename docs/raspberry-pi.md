@@ -99,7 +99,7 @@ Apply either preset by recreating the collector:
 ```bash
 docker compose up -d --wait syslogng
 # For locally built images, use the standalone development file instead:
-docker compose -f docker-compose.dev.yml up -d --build --wait syslogng
+docker compose -f compose.dev.yml up -d --build --wait syslogng
 ```
 
 Normal file history is enabled by the shipped syslog-ng configuration. Raw UDP
@@ -119,7 +119,7 @@ docker volume rm syslogserver_ramlogs
 docker compose up -d --wait syslogng
 ```
 
-Use `-f docker-compose.dev.yml` consistently for a development stack. This removes
+Use `-f compose.dev.yml` consistently for a development stack. This removes
 only temporary RAM files; do not remove `dbdata`. Switching to RAM does not
 remove existing host logs, and switching back makes those files available again;
 RAM-only records are not automatically copied to the host directory. Copy a

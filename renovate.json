@@ -70,7 +70,9 @@
       ],
       "automerge": true,
       "automergeType": "pr",
-      "platformAutomerge": false
+      "platformAutomerge": false,
+      "groupName": null,
+      "rebaseWhen": "behind-base-branch"
     }
   ],
   "customManagers": [
@@ -122,5 +124,9 @@
       ],
       "versioningTemplate": "semver"
     }
-  ]
+  ],
+  "minimumReleaseAge": "3 days",
+  "prConcurrentLimit": 3,
+  "rebaseWhen": "conflicted",
+  "ignoreUnstable": true
 }

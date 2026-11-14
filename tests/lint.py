@@ -137,7 +137,10 @@ def check_environment(files):
             continue
         match = re.fullmatch(r"([A-Z][A-Z0-9_]*)=(.+)", line)
         if not match or match[1] in examples or not comment:
-            print(f".env.example:{number}: require a unique variable, example value and description", flush=True)
+            print(
+                f".env.example:{number}: require a unique variable, example value and description",
+                flush=True,
+            )
             passed = False
         else:
             examples[match[1]] = match[2]
@@ -147,7 +150,10 @@ def check_environment(files):
         referenced.update(re.findall(r"(?<!\$)\$\{([A-Z][A-Z0-9_]*)", (ROOT / name).read_text()))
     missing = referenced - examples.keys()
     if missing:
-        print(f".env.example: undocumented Compose variables: {', '.join(sorted(missing))}", flush=True)
+        print(
+            f".env.example: undocumented Compose variables: {', '.join(sorted(missing))}",
+            flush=True,
+        )
         passed = False
     return passed
 
@@ -182,7 +188,13 @@ def main():
     check("Markdown links", [p for p in files if p.endswith(".md")], function=check_markdown)
     check(
         "Environment examples",
-        [p for p in files if Path(p).name.startswith("docker-compose") and p.endswith((".yml", ".yaml"))],
+        [
+            p
+            for p in files
+            if Path(p).name.startswith("compose")
+            and not p.startswith("tests/")
+            and p.endswith((".yml", ".yaml"))
+        ],
         function=check_environment,
     )
     # VS Code settings permit JSON comments and are not strict JSON.
@@ -211,6 +223,11 @@ def main():
         "Python / Ruff",
         [p for p in files if p.endswith(".py")],
         command=["ruff", "check", "--no-cache", "--config", "ruff.toml"],
+    )
+    check(
+        "Python / formatting",
+        [p for p in files if p.endswith(".py")],
+        command=["ruff", "format", "--check", "--config", "ruff.toml"],
     )
     print("\n================ Summary ================", flush=True)
     for label, passed in results:

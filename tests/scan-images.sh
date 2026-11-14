@@ -17,6 +17,9 @@ for specification in "$@"; do
     exit 2
   fi
   target=("$image")
+  if [[ -n "${SCAN_PLATFORM:-}" ]]; then
+    target=(--platform "$SCAN_PLATFORM" "$image")
+  fi
   if [[ "$image" == archive:* ]]; then
     target=(--input "${image#archive:}")
   fi

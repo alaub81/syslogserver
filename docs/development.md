@@ -5,7 +5,7 @@ and automated regression tests remain in the repository. Run the cleanup
 regressions without a live database:
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
+./tests/test-check.sh
 ```
 
 Run the same lint checks as CI (or the VS Code task `lint:all`):
@@ -30,7 +30,8 @@ their documented locations and are also Git-ignored.
 Renovate manages version-update PRs for GitHub Actions, Dockerfiles, Compose
 images, Python and native lint tools, LogAnalyzer and Supercronic. Supercronic's
 download URLs in the syslogng and dbcleanup Dockerfiles are updated together.
-New update branches are scheduled for Mondays before 06:00 Europe/Berlin.
+New update branches are scheduled for Mondays before 06:00 Europe/Berlin,
+with a three-day minimum release age and at most three concurrent PRs.
 Non-major updates are grouped separately for Actions and Python lint
 dependencies; Docker images and major upgrades are reviewed per dependency.
 Supercronic minor/patch updates merge automatically after CI passes; all other
@@ -40,7 +41,7 @@ The three application Dockerfiles refresh package lists and upgrade installed
 Debian packages before installing their dependencies. Their official base images
 already enable the matching Debian security repository. CI and release builds
 re-run the `os-packages` stage with `no-cache-filters`; local fresh builds can use
-`docker compose -f docker-compose.dev.yml --env-file .env build --pull --no-cache`.
+`docker compose -f compose.dev.yml --env-file .env build --pull --no-cache`.
 This picks up available package fixes even before a base image is republished.
 Rebuilding an older release tag still uses that tag's Dockerfiles.
 
@@ -66,38 +67,60 @@ configuration changes must be on the default branch before they take effect.
 
 All PRs and main pushes run lint/regression and Compose checks. Runtime changes
 also run fresh image builds, Trivy scans and an isolated [end-to-end stack test](../tests/README.md#end-to-end-stack-test).
-Fixable HIGH/CRITICAL findings fail CI. Set `CI required` as a required status
-check in GitHub's main branch rules to enforce the checks before merging.
+Fixable HIGH/CRITICAL findings fail CI. Branch protection and mandatory GitHub
+status checks are deliberately deferred; the aggregate status remains available.
 
 ## Build and CI layout
 
 Application build contexts live under `resources/{syslogng,loganalyzer,dbcleanup}`.
 Runtime configuration and database initialization live under `data/`.
-`docker-compose.dev.yml` is a complete standalone copy of production, adding
+`compose.dev.yml` is a complete standalone copy of production, adding
 only build contexts and local image names. VS Code can launch that file directly
 without an overlay or extra environment parameters. `tests/check_compose.py`
 compares the resolved runtime settings of both files in CI to prevent drift.
 
-CI renders the development Compose file for Buildx Bake. Each image is built
-once per architecture and reused by E2E and scanning. PRs test amd64; runtime
-changes on main additionally test arm64 on a native runner. Per-image and
-per-architecture build caches are isolated. Documentation and lint-only changes still
-run lint/regressions/Compose validation and the required aggregate check.
-See the [test guide](../tests/README.md) for coverage and caching details.
+CI uses the tested `tools/change_plan.py` dependency graph. Pure documentation
+changes run static checks without application builds or behavior tests. Unknown
+diffs, workflows, tooling, Compose and test inputs take the conservative full path.
+A changed application is recorded individually, but the shared database/schema
+requires current versions of all three images for E2E. These images are built
+once per architecture and reused by E2E and scanning. Both amd64 and arm64 use
+native CI runners, including pull requests; matrices do not cancel other evidence
+on the first failure. Per-image/per-architecture caches remain isolated.
 
 ## Releases and scheduled refreshes
 
-Tag pushes, manual rebuilds and the weekly Tuesday 01:00 UTC refresh use one
-release path. The schedule rebuilds the latest stable tag; manual runs rebuild
-the latest `num_tags` stable releases (1–20). Historical tags still use their
-own Dockerfiles, including legacy root-level Dockerfiles when necessary.
+Every selected release commit must have a completed, successful push CI run on
+the default branch. A missing, failed, running or unverifiable run blocks planning
+before any image build. The latest attempt counts; no runner polls waiting for CI.
+Push the commit, wait for CI, then push a stable tag. The same exact-commit check
+applies to manual and scheduled refreshes; historical tags without qualifying CI
+are deliberately blocked rather than silently bypassing validation.
 
-Each application image is built and scanned for amd64 and arm64, then publishing
-reuses those layers on the same builder. The gate consistently rejects fixable
-HIGH/CRITICAL findings. Reports are converted from each scan's JSON rather than
-rescanning. Full reports include every severity and unfixed findings; only the
-gate applies the reviewed CVE exceptions. SARIF is uploaded even after a failed
-gate, and raw reports remain available as workflow artifacts. QEMU is confined to release arm64 builds. Publishing is serialized.
+For a tag release, the planner compares image inputs with the preceding stable
+tag. Unchanged images are loaded from an immutable registry digest; a missing
+source image falls back to a build. Shared/unknown inputs force builds. Tuesday
+01:00 UTC refreshes and manual `num_tags` runs (1–20) rebuild selected images,
+including their OS package stages, even if the base digest has not changed.
+Historical source layouts remain supported when their commit has qualifying CI.
+
+Each architecture is loaded once, smoke-tested and scanned by its immutable local
+image ID. Full JSON/SARIF reports and a scan receipt are retained for seven days,
+including gate failures. Only a complete matching receipt permits publication.
+The publisher pushes those exact image configs, verifies registry config digests,
+checks the two-platform candidate index, then promotes its digest to release
+aliases. There is no build after scanning. Candidate tags use the workflow run ID;
+stable aliases are never assigned before both architecture gates pass for that image.
+Each image job publishes independently; a failure can leave a partial release of
+other successful images, so inspect every job before announcing a release.
+
+Loaded Docker images do not carry separate BuildKit attestation manifests.
+Full vulnerability inventories and publication receipts are kept as artifacts;
+registry SBOM/provenance attachment is a separately reviewed extension, not a
+claim made by this workflow. Monthly/on-demand security runs scan current published
+images on both platforms and the complete committed history for secrets. CI scans
+only the changed commit range with Gitleaks and falls back to full history if the
+base is unknown. Logs are redacted; test credentials are disposable fixtures.
 
 Full version aliases are always updated for the selected tag. Major, minor and
 `latest` aliases are updated only by the newest stable version in the relevant
@@ -118,10 +141,18 @@ in [image scan review](security-scans.md).
 | Private vulnerability reporting | Disabled. |
 | Main branch protection/rulesets | No protection configured; `CI required` is not enforced. |
 
-Repository files cannot enable these GitHub settings. To complete enforcement,
-configure `CI required` for main and enable Dependabot security updates if it
-should own alert-driven fix PRs. Renovate's vulnerability PRs remain disabled
+Repository files cannot enable these GitHub settings. To complete security-update coverage,
+enable Dependabot security updates if it should own alert-driven fix PRs.
+Branch protection remains deferred for all repositories until explicitly approved. Renovate's vulnerability PRs remain disabled
 to avoid two bots proposing the same security fix. Private reporting can be
 enabled independently. These account-side settings were inspected without
 changing them. Automatic dependency submission is disabled; no extra submission
 workflow is needed for the currently recognized manifests.
+
+Known lint-only manifests, tool installers and bot configuration run static/offline
+checks without application builds. Workflow, runtime-test and unknown input changes
+remain conservative full-stack changes.
+
+Manual dependency updates rebase on conflicts. The Supercronic automerge allowlist
+rebases when behind the base branch so it obtains fresh CI without requiring branch
+protection. GitHub settings remain deferred as described in the profile.

@@ -1,0 +1,13 @@
+# Rendered by e2e-check.sh with disposable, loopback-only test settings.
+services:
+  syslogng:
+    image: ${SYSLOG_IMAGE}
+    extra_hosts:
+      - "dns-e2e.example.test:127.0.0.42"
+    volumes:
+      - ${TEST_DIRECTORY}/syslog-config:/etc/syslog-ng/conf.d/:ro
+      - ${TEST_DIRECTORY}/logs:/var/log
+  loganalyzer:
+    image: ${LOGANALYZER_IMAGE}
+  dbcleanup:
+    image: ${CLEANUP_IMAGE}

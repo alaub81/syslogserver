@@ -91,7 +91,7 @@ The snippet loads after `10-syslogsrv.conf` and overrides `use_dns(no)` and
 `use_fqdn(no)` with `yes`, enabling the DNS cache as well. No image rebuild is
 needed for a running collector. Before the first start, just copy the file and
 use the normal Compose startup command. For a development stack, add
-`-f docker-compose.dev.yml` to each Docker Compose command.
+`-f compose.dev.yml` to each Docker Compose command.
 
 The resolver inside the container must be able to resolve the sender IP to a
 name (for example, a PTR record in your local DNS). Test with a real device IP:
@@ -213,3 +213,51 @@ Look for `delivery-test` in LogAnalyzer. For missing rows, inspect SQL errors
 and `syslog-ng-ctl stats` for queued/dropped records. For unexpected file output,
 check which optional `.conf` files are enabled. Database text columns must
 support `utf8mb4` for full Unicode messages.
+
+
+## Updates, backup and restore
+
+Keep the same Compose project name, `.env`, enabled configuration files and `dbdata`
+volume. Record the current image digests before an update. Pull and validate before
+replacing containers; never use `down --volumes` on a production installation.
+
+```bash
+docker compose config --quiet
+docker compose pull
+docker compose up -d --wait
+docker compose ps
+```
+
+Back up `.env` and local configuration separately to protected storage; they may
+contain credentials or private log routing. A filesystem copy of a running MariaDB
+volume is not a consistent database backup. Create a SQL dump instead:
+
+```bash
+umask 077
+docker compose exec -T database sh -ec '
+  exec mariadb-dump --user=root --password="$MARIADB_ROOT_PASSWORD" \
+    --single-transaction --routines --events "$MARIADB_DATABASE"
+' > syslog-backup.sql
+test -s syslog-backup.sql
+```
+
+Keep only dumps from a successful command. Back up persistent file logs separately;
+RAM logs must be exported before stopping the collector. Verify backups by restoring
+them into an isolated test database. The disposable E2E suite includes a database
+backup/restore round trip; it does not prove a particular production backup is valid.
+
+To restore deliberately into an existing installation, first take a fresh backup
+and stop ingestion/cleanup. Restore replaces table contents from the dump. Confirm
+the correct project, database version and backup file before running:
+
+```bash
+docker compose stop syslogng dbcleanup
+docker compose exec -T database sh -ec '
+  exec mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"
+' < syslog-backup.sql
+docker compose up -d --wait
+```
+
+Check database rows, HTTP access and a fresh test message afterwards. Major database
+upgrades can prevent in-place downgrade; restore into a compatible database instead
+of reusing an upgraded volume with an older server image.

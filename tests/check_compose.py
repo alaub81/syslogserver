@@ -15,18 +15,31 @@ APPLICATION_IMAGES = {
 
 
 def configuration(filename, storage):
-    result = subprocess.run([
-        "docker", "compose", "--env-file", ".env.example", "-f", filename,
-        "config", "--format", "json",
-    ], cwd=ROOT, check=True, capture_output=True, text=True,
-       env=dict(os.environ, SYSLOG_LOG_STORAGE=storage, SYSLOG_LOG_RAM_SIZE="128m"))
+    result = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            ".env.example",
+            "-f",
+            filename,
+            "config",
+            "--format",
+            "json",
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=dict(os.environ, SYSLOG_LOG_STORAGE=storage, SYSLOG_LOG_RAM_SIZE="128m"),
+    )
     return json.loads(result.stdout)
 
 
 def main():
     for storage in ("./data/syslog-ng/logs", "ramlogs"):
-        production = configuration("docker-compose.yml", storage)
-        development = configuration("docker-compose.dev.yml", storage)
+        production = configuration("compose.yml", storage)
+        development = configuration("compose.dev.yml", storage)
         for service, image in APPLICATION_IMAGES.items():
             build = development["services"][service].pop("build")
             context = ROOT / "resources" / service
@@ -39,7 +52,9 @@ def main():
             development["services"][service]["image"] = production["services"][service]["image"]
         if production != development:
             raise SystemExit(f"Compose runtime settings differ for storage={storage}")
-        mount = next(v for v in production["services"]["syslogng"]["volumes"] if v["target"] == "/var/log")
+        mount = next(
+            v for v in production["services"]["syslogng"]["volumes"] if v["target"] == "/var/log"
+        )
         if storage == "ramlogs":
             if mount["type"] != "volume" or mount["source"] != "ramlogs":
                 raise SystemExit("RAM logging must use the ramlogs volume")

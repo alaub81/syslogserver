@@ -25,24 +25,46 @@ class ScanPolicyTests(unittest.TestCase):
             "SchemaVersion": 2,
             "ArtifactName": "security-policy-regression",
             "ArtifactType": "container_image",
-            "Results": [{
-                "Target": "usr/local/bin/gosu", "Class": "lang-pkgs", "Type": "gobinary",
-                "Vulnerabilities": [{
-                    "VulnerabilityID": "CVE-2025-68121", "PkgName": "stdlib",
-                    "InstalledVersion": "v1.24.6", "FixedVersion": "v1.24.13",
-                    "PkgIdentifier": {"PURL": "pkg:golang/stdlib@v1.24.6"},
-                    "Severity": "CRITICAL", "Title": "Policy regression fixture",
-                }],
-            }],
+            "Results": [
+                {
+                    "Target": "usr/local/bin/gosu",
+                    "Class": "lang-pkgs",
+                    "Type": "gobinary",
+                    "Vulnerabilities": [
+                        {
+                            "VulnerabilityID": "CVE-2025-68121",
+                            "PkgName": "stdlib",
+                            "InstalledVersion": "v1.24.6",
+                            "FixedVersion": "v1.24.13",
+                            "PkgIdentifier": {"PURL": "pkg:golang/stdlib@v1.24.6"},
+                            "Severity": "CRITICAL",
+                            "Title": "Policy regression fixture",
+                        }
+                    ],
+                }
+            ],
         }
 
     def gate(self, fixture=None, policy=None):
         report = self.directory / "report.json"
         report.write_text(json.dumps(fixture or self.fixture))
-        result = subprocess.run([
-            "trivy", "convert", "--ignorefile", str(policy or self.policy),
-            "--format", "json", "--severity", "HIGH,CRITICAL", "--exit-code", "1", str(report),
-        ], capture_output=True, text=True)
+        result = subprocess.run(
+            [
+                "trivy",
+                "convert",
+                "--ignorefile",
+                str(policy or self.policy),
+                "--format",
+                "json",
+                "--severity",
+                "HIGH,CRITICAL",
+                "--exit-code",
+                "1",
+                str(report),
+            ],
+            capture_output=True,
+            text=True,
+        )
         self.assertIn(result.returncode, (0, 1), result.stderr)
         output = json.loads(result.stdout)
         count = sum(len(r.get("Vulnerabilities") or []) for r in output.get("Results", []))
@@ -55,7 +77,9 @@ class ScanPolicyTests(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         fixture = copy.deepcopy(self.fixture)
         original = fixture["Results"][0]["Vulnerabilities"][0]
-        fixture["Results"][0]["Vulnerabilities"] = [dict(original, VulnerabilityID=cve) for cve in ids]
+        fixture["Results"][0]["Vulnerabilities"] = [
+            dict(original, VulnerabilityID=cve) for cve in ids
+        ]
         self.assertEqual(self.gate(fixture), 0)
 
     def test_different_binary_path_fails(self):
@@ -80,9 +104,10 @@ class ScanPolicyTests(unittest.TestCase):
 
     def test_expired_exception_fails(self):
         expired = self.directory / "expired.yaml"
-        expired.write_text(re.sub(r"expired_at: [0-9-]+", "expired_at: 2000-01-01", self.policy.read_text()))
+        expired.write_text(
+            re.sub(r"expired_at: [0-9-]+", "expired_at: 2000-01-01", self.policy.read_text())
+        )
         self.assertEqual(self.gate(policy=expired), 1)
-
 
     def test_full_reports_and_fixable_gate(self):
         """Keep all findings visible while filtering only gate input and exceptions."""
@@ -111,21 +136,29 @@ class ScanPolicyTests(unittest.TestCase):
             with self.subTest(severity=severity, status=status, cve=cve):
                 fixture = copy.deepcopy(self.fixture)
                 vulnerability = fixture["Results"][0]["Vulnerabilities"][0]
-                vulnerability.update(Severity=severity, Status=status, FixedVersion=fixed, VulnerabilityID=cve)
+                vulnerability.update(
+                    Severity=severity, Status=status, FixedVersion=fixed, VulnerabilityID=cve
+                )
                 source = self.directory / "scan.json"
                 source.write_text(json.dumps(fixture))
                 reports = self.directory / f"reports-{index}"
-                env = dict(os.environ, PATH=f"{commands}{os.pathsep}{os.environ['PATH']}", SCAN_FIXTURE=str(source))
+                env = dict(
+                    os.environ,
+                    PATH=f"{commands}{os.pathsep}{os.environ['PATH']}",
+                    SCAN_FIXTURE=str(source),
+                )
                 result = subprocess.run(
                     ["bash", "tests/scan-images.sh", str(reports), "fixture=unused:test"],
-                    cwd=ROOT, env=env, capture_output=True, text=True,
+                    cwd=ROOT,
+                    env=env,
+                    capture_output=True,
+                    text=True,
                 )
                 self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
                 raw = json.loads((reports / "fixture.json").read_text())
                 self.assertEqual(len(raw["Results"][0]["Vulnerabilities"]), 1)
                 sarif = json.loads((reports / "fixture.sarif").read_text())
                 self.assertEqual(len(sarif["runs"][0]["results"]), 1)
-
 
 
 if __name__ == "__main__":

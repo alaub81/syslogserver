@@ -21,7 +21,7 @@
       "args": [
         "compose",
         "-f",
-        "${workspaceFolder}/docker-compose.dev.yml",
+        "${workspaceFolder}/compose.dev.yml",
         "up",
         "-d",
         "--build",

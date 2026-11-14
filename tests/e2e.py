@@ -22,10 +22,16 @@ class Stack:
         self.config = self.directory / "syslog-config"
         self.prefix = project
         self.compose = [
-            "docker", "compose", "--project-name", project,
-            "--env-file", str(self.directory / "stack.env"),
-            "-f", str(ROOT / "docker-compose.dev.yml"),
-            "-f", str(self.directory / "override.yml"),
+            "docker",
+            "compose",
+            "--project-name",
+            project,
+            "--env-file",
+            str(self.directory / "stack.env"),
+            "-f",
+            str(ROOT / "compose.dev.yml"),
+            "-f",
+            str(self.directory / "override.yml"),
         ]
         self.udp_port = self.port("syslogng", 514, "udp")
         self.tcp_port = self.port("syslogng", 514, "tcp")
@@ -33,8 +39,9 @@ class Stack:
         self.expected = {}
 
     def run(self, *args, **kwargs):
-        return subprocess.run(self.compose + list(args), check=True, capture_output=True,
-                              text=True, **kwargs).stdout.strip()
+        return subprocess.run(
+            self.compose + list(args), check=True, capture_output=True, text=True, **kwargs
+        ).stdout.strip()
 
     def port(self, service, port, protocol):
         address = self.run("port", "--protocol", protocol, service, str(port))
@@ -43,10 +50,18 @@ class Stack:
         return int(address.rsplit(":", 1)[1])
 
     def query(self, sql):
-        return self.run("exec", "-T", "database", "sh", "-ec", '''
+        return self.run(
+            "exec",
+            "-T",
+            "database",
+            "sh",
+            "-ec",
+            """
 exec mariadb --connect-timeout=5 --user="$MARIADB_USER" --password="$MARIADB_PASSWORD" \
   --database="$MARIADB_DATABASE" --batch --raw --skip-column-names
-''', input=sql)
+""",
+            input=sql,
+        )
 
     def udp(self, payload):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as connection:
@@ -92,7 +107,9 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
         for message, fields in self.expected.items():
             for key, value in fields.items():
                 if actual[message][key] != value:
-                    raise AssertionError(f"{message!r}: {key}={actual[message][key]!r}, expected {value!r}")
+                    raise AssertionError(
+                        f"{message!r}: {key}={actual[message][key]!r}, expected {value!r}"
+                    )
         print(f"PASS: {label} ({len(rows)} exact rows, no duplicates).", flush=True)
         return actual
 
@@ -102,24 +119,32 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
         tcp = f"{self.prefix}-{phase}-tcp Grüße 🌡\nsecond line  "
         tcp_second = f"{self.prefix}-{phase}-tcp-second"
         self.udp(f"<14>{stamp.strftime('%b %e %T')} ci-host ci-udp: {udp}")
-        self.tcp([
-            f"<14>1 {stamp.strftime('%Y-%m-%dT%H:%M:%SZ')} ci-host ci-tcp 42 - - {tcp}",
-            f"<14>1 {stamp.strftime('%Y-%m-%dT%H:%M:%SZ')} ci-host ci-tcp 43 - - {tcp_second}",
-        ])
+        self.tcp(
+            [
+                f"<14>1 {stamp.strftime('%Y-%m-%dT%H:%M:%SZ')} ci-host ci-tcp 42 - - {tcp}",
+                f"<14>1 {stamp.strftime('%Y-%m-%dT%H:%M:%SZ')} ci-host ci-tcp 43 - - {tcp_second}",
+            ]
+        )
         self.expect(udp, host="ci-host", tag="ci-udp", priority=6, facility=1)
         self.expect(tcp, host="ci-host", tag="ci-tcp", pid=42, priority=6, facility=1)
         self.expect(tcp_second, host="ci-host", tag="ci-tcp", pid=43, priority=6, facility=1)
 
     def reload(self, mode, diagnostics=False):
         module = (ROOT / "data/syslog-ng/config/20-shelly.conf.disabled").read_text()
-        module = module.replace('@define shelly-host-mode "sender"', f'@define shelly-host-mode "{mode}"')
+        module = module.replace(
+            '@define shelly-host-mode "sender"', f'@define shelly-host-mode "{mode}"'
+        )
         (self.config / "20-shelly.conf").write_text(module)
         if diagnostics:
-            shutil.copyfile(ROOT / "data/syslog-ng/config/15-rawlog.conf.disabled",
-                            self.config / "15-rawlog.conf")
+            shutil.copyfile(
+                ROOT / "data/syslog-ng/config/15-rawlog.conf.disabled",
+                self.config / "15-rawlog.conf",
+            )
             (self.config / "shelly-debug").mkdir(exist_ok=True)
-            shutil.copyfile(ROOT / "data/syslog-ng/config/shelly-debug/30-debug.conf.disabled",
-                            self.config / "shelly-debug/30-debug.conf")
+            shutil.copyfile(
+                ROOT / "data/syslog-ng/config/shelly-debug/30-debug.conf.disabled",
+                self.config / "shelly-debug/30-debug.conf",
+            )
         self.run("exec", "-T", "syslogng", "syslog-ng", "--syntax-only", "--no-caps")
         output = self.run("exec", "-T", "syslogng", "syslog-ng-ctl", "reload")
         if "success" not in output.lower():
@@ -132,8 +157,15 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
         for level, priority in enumerate((3, 4, 6, 7, 7)):
             message = f"{self.prefix}-{mode}-level-{level}"
             frames.append(f"{device} {level} 123.456 2 {level}|shelly_main.cpp:123 {message}")
-            self.expect(message, tag="shelly_main.cpp", source="shelly_main.cpp:123",
-                        pid=0, priority=priority, recent=1, **fields)
+            self.expect(
+                message,
+                tag="shelly_main.cpp",
+                source="shelly_main.cpp:123",
+                pid=0,
+                priority=priority,
+                recent=1,
+                **fields,
+            )
         for channel in (101, 102):
             message = f'{self.prefix}-{mode}-script-{channel} "quoted" Grüße 🌡\nnext line  '
             frames.append(f"{device} 20 124.5 {channel} 2|{message}")
@@ -148,13 +180,17 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
         self.udp("\0\0".join(frames) + "\0")
         older = f"{self.prefix}-{mode}-older-header"
         self.tcp([f"{device} 22 126.5 2|shelly_old.cpp:7 {older}"])
-        self.expect(older, tag="shelly_old.cpp", source="shelly_old.cpp:7", pid=0,
-                    priority=6, **fields)
+        self.expect(
+            older, tag="shelly_old.cpp", source="shelly_old.cpp:7", pid=0, priority=6, **fields
+        )
         self.standard(mode)
         rows = self.verify(f"Shelly {mode} mode, NUL framing, UTF-8, metadata and standard syslog")
         if mode == "sender":
-            hosts = {row["host"] for message, row in rows.items() if f"-{mode}-" in message
-                     and "-tcp" not in message and "-udp" not in message}
+            hosts = {
+                row["host"]
+                for message, row in rows.items()
+                if f"-{mode}-" in message and "-tcp" not in message and "-udp" not in message
+            }
             if len(hosts) != 1 or not next(iter(hosts)) or device in hosts:
                 raise AssertionError(f"Sender mode must retain the transport sender: {hosts}")
 
@@ -162,9 +198,19 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
         def send(label, host):
             message = f"{self.prefix}-{label}"
             payload = f"shellyplus1-aabbccddeeff 30 130.5 2 2|ci-dns.cpp:1 {message}"
-            self.run("exec", "-T", "-e", f"TEST_PAYLOAD={payload}", "syslogng", "sh", "-ec",
-                     'printf "%s" "$TEST_PAYLOAD" | nc -u -s 127.0.0.42 -w 1 127.0.0.1 514')
-            self.expect(message, host=host, tag="ci-dns.cpp", source="ci-dns.cpp:1", priority=6, pid=0)
+            self.run(
+                "exec",
+                "-T",
+                "-e",
+                f"TEST_PAYLOAD={payload}",
+                "syslogng",
+                "sh",
+                "-ec",
+                'printf "%s" "$TEST_PAYLOAD" | nc -u -s 127.0.0.42 -w 1 127.0.0.1 514',
+            )
+            self.expect(
+                message, host=host, tag="ci-dns.cpp", source="ci-dns.cpp:1", priority=6, pid=0
+            )
 
         send("dns-default-off", "127.0.0.42")
         self.verify("DNS is disabled by default")
@@ -173,7 +219,9 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
         self.reload("sender")
         send("dns-enabled", "dns-e2e.example.test")
         self.standard("dns")
-        self.verify("Copied DNS module resolves sender FQDNs and preserves supplied syslog hostnames")
+        self.verify(
+            "Copied DNS module resolves sender FQDNs and preserves supplied syslog hostnames"
+        )
         module.unlink()
         self.reload("sender")
         send("dns-disabled-again", "127.0.0.42")
@@ -182,12 +230,23 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
 
     def check_ui(self):
         # Query through the host-published HTTP port, without relying on a health probe.
-        with urllib.request.urlopen(f"http://127.0.0.1:{self.http_port}/index.php", timeout=30) as response:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{self.http_port}/index.php", timeout=30
+        ) as response:
             page = html.unescape(response.read().decode("utf-8", errors="replace"))
-        for marker in ("standard-udp", "standard-tcp", "sender-level-0", "device-script-101", "device-fragment"):
+        for marker in (
+            "standard-udp",
+            "standard-tcp",
+            "sender-level-0",
+            "device-script-101",
+            "device-fragment",
+        ):
             if f"{self.prefix}-{marker}" not in page:
                 raise AssertionError(f"LogAnalyzer does not display {marker}")
-        print("PASS: LogAnalyzer displays standard and Shelly messages through published HTTP.", flush=True)
+        print(
+            "PASS: LogAnalyzer displays standard and Shelly messages through published HTTP.",
+            flush=True,
+        )
 
     def retention(self):
         # More rows than the configured batch size force multiple real transactions.
@@ -202,14 +261,23 @@ VALUES (NOW() - INTERVAL 8 DAY, NOW() - INTERVAL 8 DAY, 1, 6, 'ci-host', '{self.
     def check_diagnostics(self):
         raw = self.run("exec", "-T", "syslogng", "cat", "/var/log/raw-udp.log")
         normalized = self.run("exec", "-T", "syslogng", "cat", "/var/log/shelly.log")
-        if f"{self.prefix}-device-level-0" not in raw or f"{self.prefix}-device-level-0" not in normalized:
-            raise AssertionError("Enabled raw and Shelly diagnostic outputs must contain the test messages")
+        if (
+            f"{self.prefix}-device-level-0" not in raw
+            or f"{self.prefix}-device-level-0" not in normalized
+        ):
+            raise AssertionError(
+                "Enabled raw and Shelly diagnostic outputs must contain the test messages"
+            )
         print("PASS: Optional raw and normalized Shelly diagnostics receive messages.", flush=True)
 
-
-
     def file_rows(self):
-        output = self.run("exec", "-T", "syslogng", "sh", "-ec", '''
+        output = self.run(
+            "exec",
+            "-T",
+            "syslogng",
+            "sh",
+            "-ec",
+            """
 for path in /var/log/events.log /var/log/rotated/events.log-*; do
   [ -f "$path" ] || continue
   case "$path" in
@@ -217,9 +285,13 @@ for path in /var/log/events.log /var/log/rotated/events.log-*; do
     *) cat -- "$path" ;;
   esac
 done
-''')
-        return [row for line in output.splitlines() if line
-                and self.prefix in (row := json.loads(line)).get("MESSAGE", "")]
+""",
+        )
+        return [
+            row
+            for line in output.splitlines()
+            if line and self.prefix in (row := json.loads(line)).get("MESSAGE", "")
+        ]
 
     def check_file_history(self, expected=None):
         expected = self.expected if expected is None else expected
@@ -239,12 +311,24 @@ done
                     value = int(row[key]) if field in ("priority", "pid") else row[key]
                     if value != expected[row["MESSAGE"]][field]:
                         raise AssertionError(f"File metadata mismatch: {field} in {row}")
-        print(f"PASS: JSON file history contains {len(rows)} exact normalized records without duplicates.", flush=True)
+        print(
+            f"PASS: JSON file history contains {len(rows)} exact normalized records without duplicates.",
+            flush=True,
+        )
 
     def restart_collector(self):
         self.run("restart", "--timeout", "10", "syslogng")
-        self.run("up", "--no-deps", "--no-build", "--pull", "never", "--wait",
-                 "--wait-timeout", "90", "syslogng")
+        self.run(
+            "up",
+            "--no-deps",
+            "--no-build",
+            "--pull",
+            "never",
+            "--wait",
+            "--wait-timeout",
+            "90",
+            "syslogng",
+        )
         # Docker can allocate different ephemeral published ports after restart.
         self.udp_port = self.port("syslogng", 514, "udp")
         self.tcp_port = self.port("syslogng", 514, "tcp")
@@ -254,10 +338,25 @@ done
         if "size 50M" not in rule or "rotate 7" not in rule:
             raise AssertionError("Persistent logging must use the standard 50M/7 rotation settings")
         self.check_file_history()
-        self.run("exec", "-T", "syslogng", "logrotate", "--state",
-                 "/var/lib/logrotate/status", "/etc/logrotate.d/syslogserver")
-        self.run("exec", "-T", "syslogng", "logrotate", "--force", "--state",
-                 "/var/lib/logrotate/e2e-status", "/etc/logrotate.d/syslogserver")
+        self.run(
+            "exec",
+            "-T",
+            "syslogng",
+            "logrotate",
+            "--state",
+            "/var/lib/logrotate/status",
+            "/etc/logrotate.d/syslogserver",
+        )
+        self.run(
+            "exec",
+            "-T",
+            "syslogng",
+            "logrotate",
+            "--force",
+            "--state",
+            "/var/lib/logrotate/e2e-status",
+            "/etc/logrotate.d/syslogserver",
+        )
         # A forced rotation must reopen the active file and keep the old history.
         self.standard("rotated")
         self.verify("SQL ingestion continues after file rotation")
@@ -276,39 +375,138 @@ done
             raise AssertionError("Missing isolated test log directory")
         override.write_text(original.replace(mount, "- ramlogs:/var/log"))
         env = self.directory / "stack.env"
-        content = env.read_text().replace('LOGROTATE_CRON="0 * * * *"', 'LOGROTATE_CRON="*/5 * * * *"')
+        content = env.read_text().replace(
+            'LOGROTATE_CRON="0 * * * *"', 'LOGROTATE_CRON="*/5 * * * *"'
+        )
         content = content.replace("LOGROTATE_SIZE=50M", "LOGROTATE_SIZE=2M")
         content = content.replace("LOGROTATE_ROTATIONS=7", "LOGROTATE_ROTATIONS=2")
-        content = content.replace("SYSLOG_LOG_STORAGE=./data/syslog-ng/logs", "SYSLOG_LOG_STORAGE=ramlogs")
+        content = content.replace(
+            "SYSLOG_LOG_STORAGE=./data/syslog-ng/logs", "SYSLOG_LOG_STORAGE=ramlogs"
+        )
         env.write_text(content)
-        self.run("up", "--no-deps", "--no-build", "--pull", "never", "--force-recreate",
-                 "--wait", "--wait-timeout", "90", "syslogng")
+        self.run(
+            "up",
+            "--no-deps",
+            "--no-build",
+            "--pull",
+            "never",
+            "--force-recreate",
+            "--wait",
+            "--wait-timeout",
+            "90",
+            "syslogng",
+        )
         self.udp_port = self.port("syslogng", 514, "udp")
         self.tcp_port = self.port("syslogng", 514, "tcp")
         filesystem = self.run("exec", "-T", "syslogng", "stat", "-f", "-c", "%T", "/var/log")
-        capacity = self.run("exec", "-T", "syslogng", "df", "-kP", "/var/log").splitlines()[-1].split()[1]
+        capacity = (
+            self.run("exec", "-T", "syslogng", "df", "-kP", "/var/log").splitlines()[-1].split()[1]
+        )
         if filesystem != "tmpfs" or int(capacity) != 128 * 1024:
             raise AssertionError(f"Expected a 128 MiB tmpfs, got {filesystem}/{capacity} KiB")
         if self.file_rows():
             raise AssertionError("RAM mode must not import persistent log history")
         rule = self.run("exec", "-T", "syslogng", "cat", "/etc/logrotate.d/syslogserver")
         schedule = self.run("exec", "-T", "syslogng", "cat", "/etc/cron.d/syslogrotate")
-        if "size 2M" not in rule or "rotate 2" not in rule or not schedule.startswith("*/5 * * * * "):
+        if (
+            "size 2M" not in rule
+            or "rotate 2" not in rule
+            or not schedule.startswith("*/5 * * * * ")
+        ):
             raise AssertionError("RAM logging must use 2M/2 rotation checked every five minutes")
         previous = set(self.expected)
         self.standard("ram")
         self.verify("RAM file mode preserves the database and accepts new messages")
-        self.check_file_history({key: value for key, value in self.expected.items() if key not in previous})
+        self.check_file_history(
+            {key: value for key, value in self.expected.items() if key not in previous}
+        )
         self.restart_collector()
         if self.file_rows():
             raise AssertionError("RAM file history must be discarded when the collector stops")
         previous = set(self.expected)
         self.standard("ram-restart")
         self.verify("Database history survives RAM log reset")
-        self.check_file_history({key: value for key, value in self.expected.items() if key not in previous})
+        self.check_file_history(
+            {key: value for key, value in self.expected.items() if key not in previous}
+        )
         if not list((self.directory / "logs/rotated").glob("events.log-*")):
-            raise AssertionError("Switching to RAM must leave persistent archives on the host intact")
-        print("PASS: 128 MiB RAM logs are ephemeral; persistent host archives and SQL history are retained.", flush=True)
+            raise AssertionError(
+                "Switching to RAM must leave persistent archives on the host intact"
+            )
+        print(
+            "PASS: 128 MiB RAM logs are ephemeral; persistent host archives and SQL history are retained.",
+            flush=True,
+        )
+
+    def backup_restore(self):
+        """Restore a consistent dump into a second database inside this disposable project."""
+        dump = self.run(
+            "exec",
+            "-T",
+            "database",
+            "sh",
+            "-ec",
+            """
+exec mariadb-dump --user=root --password="$MARIADB_ROOT_PASSWORD" \
+  --single-transaction --routines --events "$MARIADB_DATABASE"
+""",
+        )
+        if "SystemEvents" not in dump:
+            raise AssertionError("Backup does not contain the event table")
+        self.run(
+            "exec",
+            "-T",
+            "database",
+            "sh",
+            "-ec",
+            """
+exec mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" \
+  --execute='CREATE DATABASE syslog_restore_check CHARACTER SET utf8mb4'
+""",
+        )
+        try:
+            self.run(
+                "exec",
+                "-T",
+                "database",
+                "sh",
+                "-ec",
+                """
+exec mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" syslog_restore_check
+""",
+                input=dump,
+            )
+            query = "SELECT ID, HEX(Message), FromHost FROM SystemEvents ORDER BY ID;"
+            expected = self.query(query)
+            restored = self.run(
+                "exec",
+                "-T",
+                "database",
+                "sh",
+                "-ec",
+                """
+exec mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" \
+  --batch --raw --skip-column-names syslog_restore_check
+""",
+                input=query,
+            )
+            if expected != restored or not restored:
+                raise AssertionError("Restored rows differ from the consistent source dump")
+        finally:
+            self.run(
+                "exec",
+                "-T",
+                "database",
+                "sh",
+                "-ec",
+                """
+exec mariadb --user=root --password="$MARIADB_ROOT_PASSWORD" \
+  --execute='DROP DATABASE syslog_restore_check'
+""",
+            )
+        print(
+            "PASS: isolated SQL backup/restore preserves exact messages and metadata.", flush=True
+        )
 
 
 def main():
@@ -327,6 +525,7 @@ def main():
     stack.check_diagnostics()
     stack.persistent_files()
     stack.ram_files()
+    stack.backup_restore()
     stack.retention()
 
 

@@ -1,4 +1,4 @@
-# Standalone development copy of docker-compose.yml with local image builds.
+# Standalone development copy of compose.yml with local image builds.
 # Keep runtime settings identical; tests/check_compose.py verifies parity.
 # Persistent file logs by default; .env can select the SD-card-friendly RAM volume.
 x-service-logging: &service-logging

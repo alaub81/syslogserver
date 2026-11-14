@@ -34,7 +34,8 @@ class InstallerTests(unittest.TestCase):
     def test_mixed_versions_rejected_even_with_cached_binary(self):
         specification = copy.deepcopy(self.specification)
         specification["assets"]["linux-arm64"] = {
-            **specification["assets"]["linux-x86_64"], "version": "v1.2.4"
+            **specification["assets"]["linux-x86_64"],
+            "version": "v1.2.4",
         }
         with patch.object(installer, "has_version") as check:
             with self.assertRaisesRegex(ValueError, "one version"):
@@ -64,7 +65,9 @@ class InstallerTests(unittest.TestCase):
             patch.object(installer, "BIN", self.bin),
             patch.object(installer.shutil, "which", return_value=None),
             patch.object(installer, "has_version", return_value=version_matches),
-            patch.object(installer.urllib.request, "urlretrieve", side_effect=self.retrieve) as fetch,
+            patch.object(
+                installer.urllib.request, "urlretrieve", side_effect=self.retrieve
+            ) as fetch,
         ):
             installer.install_binary("linter", specification, "linux-x86_64")
             return fetch.call_args.args[0]
@@ -72,7 +75,8 @@ class InstallerTests(unittest.TestCase):
     def test_versioned_download_url_and_verified_binary(self):
         url = self.install(self.specification)
         self.assertEqual(
-            url, "https://github.com/example/linter/releases/download/v1.2.3/linter_1.2.3_linux_amd64"
+            url,
+            "https://github.com/example/linter/releases/download/v1.2.3/linter_1.2.3_linux_amd64",
         )
         self.assertEqual((self.bin / "linter").read_bytes(), self.payload)
         self.assertTrue((self.bin / "linter").stat().st_mode & 0o111)
