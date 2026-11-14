@@ -61,3 +61,24 @@ Repository owner `alaub81` owns these documented decisions; review by 2027-02-01
 Known lint-only manifests, tool installers and bot configuration run static/offline
 checks without application builds. Workflow, runtime-test and unknown input changes
 remain conservative full-stack changes.
+
+
+## README content contract
+
+The root README preserves the published-image quick start, local Compose build
+commands and the purpose/variable mapping of generated database passwords.
+Shelly parsing is a key feature even though activation is optional: its setup,
+host modes, extra logs, DNS, configuration reload and storage choices remain
+directly usable from the README. Detailed guides supplement those entry points.
+Before restructuring the README, compare its important features and commands
+with the previous version; shortening is not a reason to remove user workflows.
+
+## Automatic release notes
+
+Stable tag pushes announce a release after successful publication of all three
+images. English notes include direct commits, reachable stable-tag comparisons,
+versioned documentation and actual multi-platform image digests from publication
+receipts. Existing release text/drafts are preserved, older versions are not
+marked latest, and scheduled/manual refreshes do not overwrite initial notes.
+The notes job alone has content write permission; API errors fail the workflow.
+Local generation and retry behavior are documented in the development guide.

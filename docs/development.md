@@ -112,7 +112,8 @@ checks the two-platform candidate index, then promotes its digest to release
 aliases. There is no build after scanning. Candidate tags use the workflow run ID;
 stable aliases are never assigned before both architecture gates pass for that image.
 Each image job publishes independently; a failure can leave a partial release of
-other successful images, so inspect every job before announcing a release.
+other successful images. The final notes job waits for all image jobs to succeed
+before announcing a release.
 
 Loaded Docker images do not carry separate BuildKit attestation manifests.
 Full vulnerability inventories and publication receipts are kept as artifacts;
@@ -156,3 +157,37 @@ remain conservative full-stack changes.
 Manual dependency updates rebase on conflicts. The Supercronic automerge allowlist
 rebases when behind the base branch so it obtains fresh CI without requiring branch
 protection. GitHub settings remain deferred as described in the profile.
+
+## Automatic release notes
+
+A stable tag push creates a public GitHub release only after exact-commit CI,
+all image smoke tests/security gates and publication of all three images succeed.
+Reused images are included. The notes job downloads receipts from the current run
+and verifies their tag, commit, image plan, platforms and published index digests.
+It does not build images again. Use **Re-run failed jobs** after fixing a transient
+notes/API error to keep successful image jobs.
+
+English notes include non-merge commits (including direct commits), commit links,
+the preceding reachable lower stable version, a comparison/source link and the
+three versioned image references with their actual publication digests. Review
+breaking changes and migration instructions before tagging; commit subjects are
+an automatic changelog, not an inferred migration guide. Commit text is escaped.
+Only the newest stable version is marked latest. Existing releases, including
+drafts and edited notes, are preserved. API failures stop the job. Scheduled and
+manual same-tag image refreshes do not create releases or change their notes;
+those notes record the initial publication, while refresh receipts record new digests.
+Only the notes job receives repository content write permission.
+
+For a local preview, download the three `trivy-vX.Y.Z-*` artifacts from the same
+successful release run into separate subdirectories. Save that run's release
+matrix JSON (`{"include": [...]}`) in `/tmp/release-matrix.json`, fetch its tag and run:
+
+```bash
+python3 tools/create_release_notes.py --tag vX.Y.Z \
+  --receipts /tmp/publications --matrix "$(cat /tmp/release-matrix.json)" \
+  --output /tmp/release-notes.md
+```
+
+Preview mode writes a local file only. `--publish` additionally requires the GitHub
+CLI and an authenticated token; it verifies the existing remote tag and uses a
+notes file. No release tag is created by this tool.
