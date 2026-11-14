@@ -13,6 +13,8 @@ import sys
 import time
 import urllib.request
 
+from shelly_fixtures import BODY, record
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -146,7 +148,10 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
                 self.config / "shelly-debug/30-debug.conf",
             )
         self.run("exec", "-T", "syslogng", "syslog-ng", "--syntax-only", "--no-caps")
-        output = self.run("exec", "-T", "syslogng", "syslog-ng-ctl", "reload")
+        try:
+            output = self.run("exec", "-T", "syslogng", "syslog-ng-ctl", "reload")
+        except subprocess.CalledProcessError as error:
+            raise AssertionError(f"Reload failed: {error.stdout}\n{error.stderr}") from error
         if "success" not in output.lower():
             raise AssertionError(f"Reload failed: {output}")
 
@@ -227,6 +232,59 @@ FROM SystemEvents WHERE Message LIKE '%{self.prefix}%' ORDER BY ID;
         send("dns-disabled-again", "127.0.0.42")
         self.verify("Removing the DNS module restores sender IPs without changing existing rows")
         self.check_file_history()
+
+    def shelly_fragments(self):
+        # Whitespace after the JSON object identifies each case without changing
+        # the observed 128-byte boundary. SQL and file history must match exactly.
+        for index, case in enumerate(("join", "device", "gap", "uptime", "separate", "tcp")):
+            body = BODY + b" " * index
+            device = f"shelly-{self.prefix}-{case}"
+            first = record(body[:128], device=device)
+            second = record(
+                body[128:],
+                seq=12 if case == "gap" else 11,
+                device=device + "-other" if case == "device" else device,
+                uptime="123.457" if case == "uptime" else "123.456",
+            )
+            if case == "separate":
+                self.udp(first.decode())
+                self.udp(second.decode())
+            elif case == "tcp":
+                self.tcp([(first + b"\0" + second).decode()])
+            else:
+                self.udp((first + b"\0" + second).decode())
+            # These cases carry the test prefix in HOST rather than MESSAGE;
+            # query separately from rows(), which selects message markers.
+            deadline = time.monotonic() + 15
+            while True:
+                output = self.query(
+                    f"SELECT HEX(Message) FROM SystemEvents WHERE FromHost LIKE '{device}%' ORDER BY ID;"
+                )
+                actual = [bytes.fromhex(line) for line in output.splitlines() if line]
+                expected = [body] if case == "join" else [body[:128], body[128:]]
+                if len(actual) >= len(expected) or time.monotonic() >= deadline:
+                    break
+                time.sleep(0.5)
+            if actual != expected:
+                raise AssertionError(f"Fragment case {case}: {actual!r} != {expected!r}")
+            history = self.run("exec", "-T", "syslogng", "cat", "/var/log/events.log")
+            file_messages = [
+                row["MESSAGE"].encode()
+                for line in history.splitlines()
+                if (row := json.loads(line)).get("HOST", "").startswith(device)
+            ]
+            if file_messages != expected:
+                raise AssertionError(
+                    f"Fragment file case {case}: {file_messages!r} != {expected!r}"
+                )
+            if case == "join":
+                raw = self.run("exec", "-T", "syslogng", "cat", "/var/log/raw-udp.log")
+                if (first + b"\0" + second).decode() not in raw:
+                    raise AssertionError("Raw diagnostics must retain the original split datagram")
+        print(
+            "PASS: UDP fragment repair and device/sequence/time/transport isolation in SQL/files.",
+            flush=True,
+        )
 
     def check_ui(self):
         # Query through the host-published HTTP port, without relying on a health probe.
@@ -522,6 +580,7 @@ def main():
     stack.reload("device", diagnostics=True)
     stack.shelly("device")
     stack.check_ui()
+    stack.shelly_fragments()
     stack.check_diagnostics()
     stack.persistent_files()
     stack.ram_files()

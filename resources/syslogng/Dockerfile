@@ -7,6 +7,7 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends \
   syslog-ng \
   syslog-ng-mod-sql \
+  syslog-ng-mod-python \
   libdbi1 \
   libdbd-mysql \
   mariadb-client \
@@ -19,6 +20,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 FROM os-packages
+
+ENV PYTHONPATH=/usr/local/lib/syslogserver
+COPY python/shelly_fragments.py /usr/local/lib/syslogserver/shelly_fragments.py
 
 # Download Supercronic for the target architecture.
 ARG TARGETARCH

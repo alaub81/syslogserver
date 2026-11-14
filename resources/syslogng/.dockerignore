@@ -3,3 +3,5 @@
 !*.sh
 !*.conf
 !*.ini
+!python/
+!python/shelly_fragments.py

@@ -53,8 +53,32 @@ cp data/syslog-ng/config/20-shelly.conf.disabled data/syslog-ng/config/20-shelly
 Shelly devices can then send UDP debug output to the normal syslog UDP port.
 The module separates NUL-delimited records inside a datagram using an internal,
 byte-counted TCP connection on loopback port 1514. That port is not published.
-Each record is retained, including script text, fragments and unknown formats.
-Fragments remain separate records; no speculative concatenation is performed.
+Script text, unknown formats and ambiguous fragments remain separate records.
+The module repairs the observed Shelly `raw-event` power-measurement split only
+when all of these conditions hold:
+
+- Two records are directly adjacent in the same UDP datagram, without empty
+  separators; device ID, uptime, channel 102 and severity match exactly.
+- Sequence numbers are consecutive, the first body is exactly 128 bytes, and
+  the second body is at most 128 bytes.
+- The boundary splits the JSON key `"event"`, and the continuation supplies
+  `"power_measurement"`. The completed JSON has the known switch-event schema,
+  consistent component/ID fields and finite numeric measurements/timestamps.
+  Duplicate keys and additional fields are rejected.
+
+No state is kept between datagrams, no timeout delays ingestion, and TCP frames,
+free text and other JSON shapes are never joined. Shelly does not provide an
+explicit continuation flag: this intentionally narrow rule handles the observed
+case, rather than trying to reconstruct arbitrary text. Unmatched records are
+preserved byte for byte. The optional raw UDP diagnostic log also preserves the
+original datagram before repair.
+
+This requires the updated collector image (including `syslog-ng-mod-python`)
+and updated Shelly template. Existing installations must update both: rebuild
+with `docker compose -f compose.dev.yml build syslogng` or pull a release
+containing the change, copy the new `20-shelly.conf.disabled` to the active
+`20-shelly.conf`, reapply the desired host mode, and recreate the collector.
+Historical database rows are not modified.
 
 The active module contains the Host-column policy:
 

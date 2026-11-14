@@ -49,6 +49,8 @@ cron syntax are checked with the real container tools during E2E.
 These tests require no running stack or network:
 
 - Cleanup: bounded batches, fixed cutoff, empty results, SQL failures and invalid settings.
+- Shelly fragment repair: the observed 128-byte JSON split, device/channel/time/
+  sequence isolation, separate datagrams, independent text and malformed JSON.
 - Native installer: version consistency, release URLs, extraction, checksums and executable versions.
 - Release tags: numeric SemVer ordering, invalid tags/counts and safe major/minor/latest aliases.
 - Planning: documentation, single-image inputs, coupled stack dependencies, unknown diffs,
@@ -81,6 +83,9 @@ The test sends through the published host ports and verifies:
 2. Shelly enabled in both `sender` and `device` host modes: NUL-delimited records,
    empty delimiters, trailing NUL, all five levels, script channels 101/102,
    unknown channels, older headers and incomplete fragments.
+   The observed power-measurement split is repaired only within one UDP datagram;
+   mismatched device/sequence/uptime and separate UDP/TCP inputs remain separate
+   in SQL and file history.
 3. Copying/removing the optional DNS template: IP-only defaults, resolved
    sender FQDNs in SQL/file history and unchanged supplied syslog hostnames.
    A local host mapping keeps this test independent of external DNS servers.

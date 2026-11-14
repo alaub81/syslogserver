@@ -11,6 +11,13 @@ filter f_is_shelly {
   match("^shelly[[:alnum:]_.-]*(?:[[:space:]]|$)" value("MESSAGE"));
 };
 
+# Repair only the verified power-measurement split pattern within one UDP
+# datagram. Ambiguous/free-text fragments remain untouched. Requires the
+# syslog-ng Python module and shelly_fragments.py from the collector image.
+parser p_shelly_fragments {
+  python(class("shelly_fragments.ShellyFragments"));
+};
+
 # Native fan-out: wrap each NUL-separated record in an RFC5424 message with
 # an RFC6587 byte count. The private TCP source emits one event per frame.
 # Byte counts preserve embedded newlines, UTF-8 and trailing spaces.
@@ -92,6 +99,9 @@ log {
   source(s_udp);
   source(s_tcp);
   filter(f_is_shelly);
+  if (match("^s_udp$" value("SOURCE"))) {
+    parser(p_shelly_fragments);
+  };
   rewrite(r_shelly_frames);
   destination(d_shelly_frames);
   flags(final,flow-control);
