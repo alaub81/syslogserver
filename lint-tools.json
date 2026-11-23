@@ -98,23 +98,23 @@
     "versionFlag": "--version",
     "assets": {
       "linux-x86_64": {
-        "version": "v0.70.0",
-        "sha256": "8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9",
+        "version": "v0.76.2",
+        "sha256": "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf",
         "filenameTemplate": "trivy_{version}_Linux-64bit.tar.gz"
       },
       "linux-arm64": {
-        "version": "v0.70.0",
-        "sha256": "2f6bb988b553a1bbac6bdd1ce890f5e412439564e17522b88a4541b4f364fc8d",
+        "version": "v0.76.2",
+        "sha256": "ab9d51f86e6a5fb936f605faff6b593ac51bc378fff4d3e8b9d58358b9c367c3",
         "filenameTemplate": "trivy_{version}_Linux-ARM64.tar.gz"
       },
       "darwin-x86_64": {
-        "version": "v0.70.0",
-        "sha256": "52d531452b19e7593da29366007d02a810e1e0080d02f9cf6a1afb46c35aaa93",
+        "version": "v0.76.2",
+        "sha256": "e08bb9ea449ecf66c6bfb03cbb8697c503ff33d35fc585c9747e3eaeb7ed4c7b",
         "filenameTemplate": "trivy_{version}_macOS-64bit.tar.gz"
       },
       "darwin-arm64": {
-        "version": "v0.70.0",
-        "sha256": "68e543c51dcc96e1c344053a4fde9660cf602c25565d9f09dc17dd41e13b838a",
+        "version": "v0.76.2",
+        "sha256": "ae7ea358326960406b703c77b2ac490190797d80b306b5b50c2a27221da0a5b8",
         "filenameTemplate": "trivy_{version}_macOS-ARM64.tar.gz"
       }
     }

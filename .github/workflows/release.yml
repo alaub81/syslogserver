@@ -133,7 +133,7 @@ jobs:
         if: always() && steps.paths.outcome == 'success'
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.70.0
+          version: v0.76.2
       - name: Smoke-test and scan both exact image IDs
         if: always() && steps.paths.outcome == 'success'
         run: python3 .automation/tools/release_image.py scan
